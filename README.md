@@ -40,6 +40,10 @@ Built with **React + TypeScript + Vite**, deployed to GitHub Pages.
 - **Guarded changes** — anything that would throw cards away asks first, and
   the nation/specialization dialog lists exactly which cards the change costs
   before you apply it.
+- **Portrait and phone layouts** — below 1200px the category rail becomes a
+  chip bar over the slots and the pool sits beside the card; below 900px those
+  two become Units/Card panes; below ~450px the fixed-width unit card scales to
+  fit. A 1080×1920 monitor keeps everything visible at once.
 
 ## Contents
 
@@ -68,7 +72,9 @@ scripts/
   check-assets.mjs     every sprite name in the tables resolves to a file
   verify-dek.mjs       codec + rules against the sample decks
   e2e-roundtrip.mjs    the built app: import → export → diff, and build-a-deck
-  dev-screenshot.mjs   headless captures of the main screens
+  dev-screenshot.mjs   headless captures of the main screens, and the
+                       portrait/phone layout checks (no horizontal overflow,
+                       the card fits the viewport)
 ```
 
 ## Development
@@ -82,9 +88,15 @@ npm run deploy     # build + publish dist/ to the gh-pages branch
 ```
 
 `npm run e2e` drives the built app in a headless browser (needs
-`npx vite preview --port 4173` running) and checks that both sample decks
-survive an import → export round trip, then builds a deck from scratch and
-verifies the pricing.
+`npx vite preview --port 4173` running): it round-trips any `.dek` in
+`/samples` through import → export, then builds a deck from scratch and
+verifies the pricing, the guards and the random generator. `npm run shots`
+captures the main screens at desktop, portrait-monitor, tablet and phone sizes
+and fails if any of them overflows horizontally or renders the card wider than
+the viewport.
+
+`/samples` holds real battlegroups exported from the game; both scripts skip
+their sample phases when it is empty, so a clean checkout still runs.
 
 ## Refreshing after a game patch
 
@@ -150,5 +162,6 @@ developers rotated the encryption key — recover it with
 - [x] Deck validation (points, availability, transports, completeness)
 - [x] Random battlegroup generator and random specialization pair
 - [x] Discard guards and a preview of what a spec change costs
+- [x] Portrait / phone layouts
 - [ ] Unit skins (`unitSkinId`/`tranSkinId` are preserved but not editable —
       the game ships no skin table in `DataBaseCompiled.asset`)

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useAppStore } from '../state/store'
 import { flagUrl, specIconUrl } from '../assets'
 import { deckTotals, filledSlotCount, validateDeck } from '../deck/rules'
+import { COMPACT_QUERY, useMediaQuery } from './useMediaQuery'
 import { t } from './i18n'
 
 function download(name: string, bytes: BlobPart, type = 'application/octet-stream') {
@@ -38,6 +39,8 @@ export function DeckToolbar({ onNewDeck, onChangeSpecs, onRandomDeck, guardDisca
   const fileInput = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [showIssues, setShowIssues] = useState(false)
+  // narrow screens use one-word button labels so the toolbar keeps to two rows
+  const compact = useMediaQuery(COMPACT_QUERY)
 
   const totals = deck ? deckTotals(db, deck) : null
   const issues = deck ? validateDeck(db, deck) : []
@@ -73,7 +76,11 @@ export function DeckToolbar({ onNewDeck, onChangeSpecs, onRandomDeck, guardDisca
               return (
                 <span key={id} className="specs-chip-item">
                   <img src={specIconUrl(s?.Icon ?? null) ?? undefined} alt="" />
-                  {db.locOr(s?.UIName, s?.Name ?? String(id))}
+                  {/* the name drops out on a phone; the badge and the button's
+                      title still identify the pair */}
+                  <span className="specs-chip-name">
+                    {db.locOr(s?.UIName, s?.Name ?? String(id))}
+                  </span>
                 </span>
               )
             })}
@@ -109,12 +116,14 @@ export function DeckToolbar({ onNewDeck, onChangeSpecs, onRandomDeck, guardDisca
 
       <span className="toolbar-spacer" />
 
-      <button onClick={() => guardDiscard(onNewDeck)}>{t(lang, 'newDeck')}</button>
+      <button onClick={() => guardDiscard(onNewDeck)}>
+        {t(lang, compact ? 'newShort' : 'newDeck')}
+      </button>
       <button disabled={!deck} onClick={() => guardDiscard(onRandomDeck)}>
         {t(lang, 'randomDeck')}
       </button>
       <button onClick={() => guardDiscard(() => fileInput.current?.click())}>
-        {t(lang, 'importDek')}
+        {t(lang, compact ? 'importShort' : 'importDek')}
       </button>
       <button
         disabled={!deck || filledSlotCount(deck) === 0}
@@ -123,7 +132,7 @@ export function DeckToolbar({ onNewDeck, onChangeSpecs, onRandomDeck, guardDisca
           download(fileName(deck!.name), bytes)
         }}
       >
-        {t(lang, 'exportDek')}
+        {t(lang, compact ? 'exportShort' : 'exportDek')}
       </button>
       <LangToggle />
       <GithubLink />

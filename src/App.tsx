@@ -9,6 +9,7 @@ import { SlotStrip } from './ui/SlotStrip'
 import { UnitPool } from './ui/UnitPool'
 import { CardPanel } from './ui/CardPanel'
 import { filledSlotCount } from './deck/rules'
+import { STACKED_QUERY, TABBED_QUERY, useMediaQuery } from './ui/useMediaQuery'
 import { t } from './ui/i18n'
 import './app.css'
 
@@ -22,6 +23,12 @@ export default function App() {
   const [dialog, setDialog] = useState<'new' | 'specs' | 'random' | null>(null)
   /** action held back until the user confirms losing the current deck */
   const [pending, setPending] = useState<(() => void) | null>(null)
+  // Portrait / narrow screens stack: the category rail becomes a chip bar over
+  // the slots, and — once even the pool and the card stop fitting side by side
+  // — those two become panes behind a switch.
+  const stacked = useMediaQuery(STACKED_QUERY)
+  const tabbed = useMediaQuery(TABBED_QUERY)
+  const [pane, setPane] = useState<'units' | 'card'>('units')
 
   useEffect(() => {
     void init()
@@ -52,7 +59,28 @@ export default function App() {
         onRandomDeck={() => setDialog('random')}
         guardDiscard={guardDiscard}
       />
-      {deck ? (
+      {!deck ? (
+        <main className="workspace empty" />
+      ) : stacked ? (
+        <main className={`workspace stacked ${tabbed ? 'tabbed' : ''}`}>
+          <CategoryRail />
+          <SlotStrip />
+          {tabbed && (
+            <div className="pane-tabs">
+              <button className={pane === 'units' ? 'active' : ''} onClick={() => setPane('units')}>
+                {t(lang, 'paneUnits')}
+              </button>
+              <button className={pane === 'card' ? 'active' : ''} onClick={() => setPane('card')}>
+                {t(lang, 'paneCard')}
+              </button>
+            </div>
+          )}
+          <div className="stacked-panes">
+            {(!tabbed || pane === 'units') && <UnitPool />}
+            {(!tabbed || pane === 'card') && <CardPanel />}
+          </div>
+        </main>
+      ) : (
         <main className="workspace">
           <CategoryRail />
           <section className="deck-column">
@@ -61,8 +89,6 @@ export default function App() {
           </section>
           <CardPanel />
         </main>
-      ) : (
-        <main className="workspace empty" />
       )}
 
       {(dialog === 'new' || dialog === 'specs') && (

@@ -59,7 +59,20 @@ await page.waitForSelector('.setup-dialog')
 await page.click('.setup-actions button:not(.primary)')
 
 let failures = 0
-const samples = (await readdir(join(ROOT, 'samples'))).filter((f) => f.endsWith('.dek'))
+
+// /samples holds real battlegroups exported from the game and is not part of a
+// clean checkout; the build-a-deck phase below runs either way.
+async function sampleDecks() {
+  try {
+    return (await readdir(join(ROOT, 'samples'))).filter((f) => f.endsWith('.dek'))
+  } catch {
+    return []
+  }
+}
+
+const samples = await sampleDecks()
+if (samples.length === 0)
+  console.log('No .dek files in /samples — skipping the import/export round trip.')
 
 for (const name of samples) {
   const raw = new Uint8Array(await readFile(join(ROOT, 'samples', name)))

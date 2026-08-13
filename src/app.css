@@ -658,3 +658,119 @@ button { font-family: inherit; }
   cursor: pointer;
 }
 .picker-dialog-actions button:hover { border-color: var(--line-hi); }
+
+/* ── portrait / narrow screens ────────────────────────────────────────────
+   Two breakpoints, both driven from ui/useMediaQuery.ts so the component tree
+   and the CSS agree:
+
+     < 1200px  "stacked"  the vertical category rail becomes a chip bar above
+                          the slots; the pool and the card share the row below
+     <  900px  "tabbed"   even those two stop fitting, so they become panes
+                          behind a Units/Card switch
+
+   A 1080x1920 portrait monitor lands in the first tier and keeps both panes
+   visible; a phone lands in the second. */
+
+.workspace.stacked {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* the category rail becomes a horizontal chip bar */
+.workspace.stacked .category-rail {
+  flex: none;
+  flex-direction: row;
+  border-right: none;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 6px 8px;
+}
+.workspace.stacked .category-row {
+  flex: 0 0 auto;
+  min-width: 124px;
+  border-left-width: 1px;
+  border-left-color: var(--line);
+  border-top: 3px solid var(--line);
+  padding: 5px 8px;
+}
+.workspace.stacked .category-row.active { border-top-color: var(--gold); }
+.workspace.stacked .category-row.over-budget { border-top-color: var(--gold); }
+.workspace.stacked .category-row.over-cap { border-top-color: var(--red); }
+
+.workspace.stacked .slot-strip { flex: none; }
+
+/* pool | card side by side, until the tabbed tier stacks them */
+.stacked-panes { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.workspace.stacked .unit-pool { flex: 1; min-width: 0; min-height: 0; }
+.workspace.stacked .card-panel { flex: 0 0 448px; min-height: 0; }
+.workspace.stacked.tabbed .stacked-panes { flex-direction: column; }
+.workspace.stacked.tabbed .card-panel {
+  flex: 1;
+  border-left: none;
+  align-items: center;
+}
+
+/* Units | Card switch, only in the tabbed tier */
+.pane-tabs {
+  display: flex;
+  flex: none;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.pane-tabs button {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 8px;
+  cursor: pointer;
+}
+.pane-tabs button.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+@media (max-width: 1199px) {
+  /* the toolbar wraps instead of squeezing its controls */
+  .toolbar { flex-wrap: wrap; row-gap: 6px; }
+  .deck-name { width: 150px; flex: 1 1 130px; }
+  .toolbar-spacer { flex-basis: 100%; height: 0; }
+  .issue-list,
+  .toolbar-error { max-width: calc(100vw - 24px); }
+}
+
+@media (max-width: 720px) {
+  .toolbar { gap: 6px; padding: 6px 8px; }
+  .toolbar button { padding: 5px 9px; }
+  .toolbar-brand { display: none; }
+  /* the specialization badges alone, so the name + specs + points fit one row */
+  .specs-chip { gap: 5px; padding: 5px 7px; }
+  .specs-chip-name { display: none; }
+  .specs-chip-item img { height: 17px; width: 17px; }
+  .deck-name { flex: 1 1 90px; min-width: 90px; font-size: 13px; }
+  .total-value { font-size: 16px; }
+  .validity { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pool-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+  .slot-card { flex-basis: 108px; }
+  .setup-dialog,
+  .confirm-dialog { padding: 12px; }
+  .setup-field { flex-wrap: wrap; }
+  .spec-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .budget-preview th,
+  .budget-preview td { padding-right: 8px; }
+}
+
+/* The unit card is a fixed 408px block, so a narrow viewport scales the whole
+   card column instead of reflowing the game's own layout. `zoom` rather than
+   `transform` so the column's scroll height stays correct. */
+@media (max-width: 447px) { .card-panel { zoom: 0.92; } }
+@media (max-width: 412px) { .card-panel { zoom: 0.85; } }
+@media (max-width: 380px) { .card-panel { zoom: 0.78; } }
+@media (max-width: 350px) { .card-panel { zoom: 0.72; } }
+
+/* dvh keeps the app pinned to the visible viewport under mobile browser chrome */
+@supports (height: 100dvh) {
+  .app { height: 100dvh; }
+  .splash { height: 100dvh; }
+}

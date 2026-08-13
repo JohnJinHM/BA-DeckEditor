@@ -93,12 +93,24 @@ const check = (ok, label, detail = '') => {
   console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${label}${detail ? `  ${detail}` : ''}`)
 }
 
-const files =
-  process.argv.slice(2).length > 0
-    ? process.argv.slice(2)
-    : (await readdir(join(ROOT, 'samples')))
-        .filter((f) => f.endsWith('.dek'))
-        .map((f) => join(ROOT, 'samples', f))
+async function sampleDecks() {
+  try {
+    return (await readdir(join(ROOT, 'samples')))
+      .filter((f) => f.endsWith('.dek'))
+      .map((f) => join(ROOT, 'samples', f))
+  } catch {
+    return []
+  }
+}
+
+const files = process.argv.slice(2).length > 0 ? process.argv.slice(2) : await sampleDecks()
+if (files.length === 0) {
+  // /samples holds real battlegroups exported from the game and is not part of
+  // a clean checkout; without one there is nothing to calibrate against.
+  console.log('No .dek files in /samples — skipping the codec and rules checks.')
+  console.log('Drop a battlegroup there (or pass one as an argument) to run them.')
+  process.exit(0)
+}
 
 for (const path of files) {
   const raw = new Uint8Array(await readFile(path))
