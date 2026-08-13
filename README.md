@@ -20,13 +20,20 @@ Everything runs client-side — no deck ever leaves your browser.
 - **Seven category tabs** with per-category spend bars: the budget line, the
   10% overspend allowance past it, and a hard 10000-point deck total.
 - **Slot editing** — a unit pool limited to what the two specs can field, with
-  each unit's per-card availability, quantity steppers, and the transport list
-  the game offers for that unit in that specialization.
+  each unit's per-card availability. **One click adds one copy**: the first
+  drops the unit into a free slot, each further click steps that card's count
+  up until availability runs out.
+- **Transports** — the list the game offers for that unit in that
+  specialization, its own count, and its own card and customization panel, so
+  a squad's vehicle is configured exactly like the squad.
 - **Unit cards** in compact or expanded form (plus the Legacy card style),
-  re-resolved as you change options, for the unit *or* its transport.
-- **Customization options** panel under the card — one row per modification
-  slot, showing the chosen loadout and its point delta, expanding to the
-  choices with their loadout art.
+  re-resolved as you change options.
+- **Customization options** panel docked under each card in the info card's own
+  style — one row per modification slot with the chosen loadout and its point
+  delta, expanding to the choices with their loadout art.
+- **Variant-aware artwork** — options that rename a unit, swap its `Units` row
+  (Scout Snipers → the M107 variant) or override its label art update the slot
+  and card to match.
 - **`.dek` import/export**, byte-compatible with the game (also exports the
   decrypted JSON for inspection).
 
@@ -40,6 +47,7 @@ src/
                 affordances stay switched off — store.editMode is false)
   deck/        model.ts   categories, slots, the Deck type
                rules.ts   slots, budgets, availability, pricing, validation
+               label.ts   variant-aware unit name + label art
                dek.ts     .dek codec (AES-256-CBC via WebCrypto)
   state/       zustand store (deck, selection, rendered card)
   ui/          setup dialog, category rail, slot strip, unit pool,
@@ -130,8 +138,9 @@ developers rotated the encryption key — recover it with
 - [x] Category slots, point budgets, 10% allowance, 10000 total
 - [x] Unit pool with per-specialization availability limits
 - [x] Transport selection and independent transport counts
-- [x] Unit/transport cards (compact, expanded, legacy)
-- [x] Customization options panel
+- [x] Unit and transport cards (compact, expanded, legacy)
+- [x] Customization options panel, in the info card's style, for both cards
+- [x] Variant-aware names and label art
 - [x] `.dek` import/export verified against real game files
 - [x] Deck validation (points, availability, transports, completeness)
 - [ ] Unit skins (`unitSkinId`/`tranSkinId` are preserved but not editable —

@@ -38,7 +38,6 @@ const STRINGS = {
 
   // Slots & pool
   emptySlot: { eng: 'Empty slot', chi: '空槽位' },
-  addUnit: { eng: 'Add a unit', chi: '添加单位' },
   removeUnit: { eng: 'Remove from battlegroup', chi: '从编组中移除' },
   searchUnits: { eng: 'Search units…', chi: '搜索单位…' },
   noUnits: { eng: 'No units available in this category.', chi: '该类别没有可用单位。' },
@@ -47,17 +46,13 @@ const STRINGS = {
     chi: '两个专精都未在该类别提供槽位。',
   },
   availability: { eng: 'Availability', chi: '可用数量' },
-  perCard: { eng: 'per card', chi: '每张卡' },
-  alreadyInDeck: { eng: 'Already in the battlegroup', chi: '已在编组中' },
   categoryFull: { eng: 'All slots in this category are filled', chi: '该类别槽位已满' },
-  pickSlotFirst: { eng: 'Select a slot to fill', chi: '请先选择要填充的槽位' },
+  availabilityHint: { eng: 'Click to add one; the count is capped by availability', chi: '点击添加一个；数量受可用上限限制' },
 
   // Slot editor
   quantity: { eng: 'Quantity', chi: '数量' },
   transport: { eng: 'Transport', chi: '运输载具' },
   transports: { eng: 'Transports', chi: '运输载具数量' },
-  noTransport: { eng: 'No transport available', chi: '无可用运输载具' },
-  unitCard: { eng: 'Unit', chi: '单位' },
   transportCard: { eng: 'Transport', chi: '运输载具' },
   customization: { eng: 'Customization options', chi: '自定义选项' },
   compact: { eng: 'Compact', chi: '默认' },
@@ -74,7 +69,6 @@ const STRINGS = {
 
   // Validation
   deckValid: { eng: 'This battlegroup is valid.', chi: '该编组有效。' },
-  issues: { eng: 'Issues', chi: '问题' },
 
   // Icon picker dialog (reached only through the ported card renderer)
   close: { eng: 'Close', chi: '关闭' },

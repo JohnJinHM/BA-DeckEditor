@@ -10,8 +10,8 @@ import { availabilityMap, reconcileSelection } from '../deck/rules'
 
 export type Lang = 'eng' | 'chi'
 
-/** Which card the right-hand panel shows for the selected slot. */
-export type CardTarget = 'unit' | 'transport'
+/** Which half of a slot an edit applies to: the unit itself or its transport. */
+export type SlotTarget = 'unit' | 'transport'
 
 interface SlotRef {
   category: CategoryKey
@@ -27,9 +27,9 @@ interface AppState {
   deck: Deck | null
   selected: SlotRef | null
 
-  /** rendered card for the selected slot; consumed by the ported UnitCard */
+  /** rendered cards for the selected slot; consumed by the ported UnitCard */
   card: CardModel | null
-  cardTarget: CardTarget
+  transportCard: CardModel | null
   compact: boolean
   style: CardStyle
   /** the card renderer's edit affordances are ported but switched off here */
@@ -44,6 +44,7 @@ interface AppState {
   setSpecs(spec1: number, spec2: number): void
 
   selectSlot(category: CategoryKey, index: number): void
+  addUnit(unitId: number): void
   setSlotUnit(unitId: number | null): void
   setSlotCount(count: number): void
   setSlotOption(modId: number, optionId: number): void
@@ -51,7 +52,6 @@ interface AppState {
   setTransportCount(count: number): void
   setTransportOption(modId: number, optionId: number): void
 
-  setCardTarget(target: CardTarget): void
   setCompact(compact: boolean): void
   setStyle(style: CardStyle): void
   setColorTarget(key: string | null): void
@@ -61,19 +61,25 @@ interface AppState {
   exportDek(): Promise<Bytes>
 }
 
-/** Re-resolve the card for the current selection. Kept as a plain field so the
+/** Re-resolve the selected slot's two cards. Kept as plain fields so the
  *  ported renderer can read `s.card` exactly as it does in BA-ReCard. */
-function renderCard(db: GameDb | null, deck: Deck | null, ref: SlotRef | null, target: CardTarget): CardModel | null {
-  if (!db || !deck || !ref) return null
-  const slot = deck.slots[ref.category]?.[ref.index]
-  if (!slot) return null
-  const unitId = target === 'transport' ? slot.transportId : slot.unitId
-  if (unitId == null) return null
-  const selection = target === 'transport' ? slot.transportOptions : slot.options
-  try {
-    return resolveCard(db, unitId, selection)
-  } catch {
-    return null
+function renderCards(
+  db: GameDb | null,
+  deck: Deck | null,
+  ref: SlotRef | null,
+): Pick<AppState, 'card' | 'transportCard'> {
+  const slot = db && deck && ref ? deck.slots[ref.category]?.[ref.index] : null
+  const render = (unitId: number | null, selection: OptionSelection) => {
+    if (!db || unitId == null) return null
+    try {
+      return resolveCard(db, unitId, selection)
+    } catch {
+      return null
+    }
+  }
+  return {
+    card: slot ? render(slot.unitId, slot.options) : null,
+    transportCard: slot ? render(slot.transportId, slot.transportOptions) : null,
   }
 }
 
@@ -87,12 +93,16 @@ function firstSlotRef(deck: Deck): SlotRef | null {
   return any ? { category: any.key, index: 0 } : null
 }
 
-/** Apply `mutate` to the selected slot and re-render the card. */
-function editSlot(state: AppState, mutate: (slot: DeckSlot) => void): Partial<AppState> {
-  const { db, deck, selected, cardTarget } = state
-  if (!deck || !selected) return {}
-  const slots = deck.slots[selected.category]
-  const slot = slots?.[selected.index]
+/** Apply `mutate` to a slot (the selected one by default) and re-render. */
+function editSlot(
+  state: AppState,
+  mutate: (slot: DeckSlot) => void,
+  ref: SlotRef | null = state.selected,
+): Partial<AppState> {
+  const { db, deck } = state
+  if (!deck || !ref) return {}
+  const slots = deck.slots[ref.category]
+  const slot = slots?.[ref.index]
   if (!slot) return {}
   const next: DeckSlot = {
     ...slot,
@@ -102,14 +112,9 @@ function editSlot(state: AppState, mutate: (slot: DeckSlot) => void): Partial<Ap
   mutate(next)
   const nextDeck: Deck = {
     ...deck,
-    slots: {
-      ...deck.slots,
-      [selected.category]: slots.map((s, i) => (i === selected.index ? next : s)),
-    },
+    slots: { ...deck.slots, [ref.category]: slots.map((s, i) => (i === ref.index ? next : s)) },
   }
-  // A slot with no transport can't show a transport card.
-  const target = cardTarget === 'transport' && next.transportId == null ? 'unit' : cardTarget
-  return { deck: nextDeck, cardTarget: target, card: renderCard(db, nextDeck, selected, target) }
+  return { deck: nextDeck, selected: ref, ...renderCards(db, nextDeck, ref) }
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -122,7 +127,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   selected: null,
 
   card: null,
-  cardTarget: 'unit',
+  transportCard: null,
   compact: true,
   style: 'new',
   editMode: false,
@@ -140,8 +145,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   async setLang(lang) {
     if (lang === get().lang) return
     const db = await loadGameDb(lang)
-    const { deck, selected, cardTarget } = get()
-    set({ db, lang, card: renderCard(db, deck, selected, cardTarget) })
+    const { deck, selected } = get()
+    set({ db, lang, ...renderCards(db, deck, selected) })
   },
 
   newDeck(countryId, spec1, spec2, name) {
@@ -156,7 +161,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       slots: Object.fromEntries(CATEGORIES.map((c) => [c.key, []])) as unknown as Deck['slots'],
     }
     const deck = { ...base, slots: slotsForSpecs(db, base) }
-    set({ deck, selected: firstSlotRef(deck), cardTarget: 'unit', card: null })
+    set({ deck, selected: firstSlotRef(deck), card: null, transportCard: null })
   },
 
   setDeckName(name) {
@@ -190,13 +195,54 @@ export const useAppStore = create<AppState>((set, get) => ({
     const prev = get().selected
     const selected =
       prev && prev.index < next.slots[prev.category].length ? prev : firstSlotRef(next)
-    set({ deck: next, selected, card: renderCard(db, next, selected, 'unit'), cardTarget: 'unit' })
+    set({ deck: next, selected, ...renderCards(db, next, selected) })
   },
 
   selectSlot(category, index) {
     const { db, deck } = get()
     const selected = { category, index }
-    set({ selected, cardTarget: 'unit', card: renderCard(db, deck, selected, 'unit') })
+    set({ selected, ...renderCards(db, deck, selected) })
+  },
+
+  /** One click on a unit in the pool = one more of that unit, the way the
+   *  Arsenal works: it drops into a free slot the first time, then steps the
+   *  card's count up until the specialization's availability runs out. */
+  addUnit(unitId) {
+    const { db, deck, selected } = get()
+    if (!db || !deck || !selected) return
+    const slots = deck.slots[selected.category]
+    const max = availabilityMap(db, [deck.spec1, deck.spec2]).get(unitId)?.max ?? 1
+
+    const existing = slots.findIndex((s) => s.unitId === unitId)
+    if (existing >= 0) {
+      const ref = { category: selected.category, index: existing }
+      set((state) =>
+        editSlot(state, (slot) => void (slot.count = Math.min(slot.count + 1, max)), ref),
+      )
+      return
+    }
+
+    const target = slots[selected.index]?.unitId == null
+      ? selected.index
+      : slots.findIndex((s) => s.unitId == null)
+    if (target < 0) return // category full — clear a slot first
+    set((state) =>
+      editSlot(
+        state,
+        (slot) => {
+          slot.unitId = unitId
+          slot.cat = CATEGORY_BY_KEY.get(selected.category)!.cat
+          slot.options = reconcileSelection(db, unitId, slot.options)
+          slot.count = 1
+          slot.unitSkinId = undefined
+          slot.transportId = null
+          slot.transportCount = 0
+          slot.transportOptions = {}
+          slot.transportSkinId = undefined
+        },
+        { category: selected.category, index: target },
+      ),
+    )
   },
 
   setSlotUnit(unitId) {
@@ -290,11 +336,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => editSlot(state, (slot) => void (slot.transportOptions[modId] = optionId)))
   },
 
-  setCardTarget(target) {
-    const { db, deck, selected } = get()
-    set({ cardTarget: target, card: renderCard(db, deck, selected, target) })
-  },
-
   setCompact(compact) {
     set({ compact })
   },
@@ -317,7 +358,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!db) throw new Error('Database not loaded')
     const deck = await decodeDek(db, bytes)
     const selected = firstSlotRef(deck)
-    set({ deck, selected, cardTarget: 'unit', card: renderCard(db, deck, selected, 'unit') })
+    set({ deck, selected, ...renderCards(db, deck, selected) })
   },
 
   async exportDek() {
@@ -334,10 +375,12 @@ export function useSelectedSlot(): DeckSlot | null {
   )
 }
 
-/** Option selection currently driving the card (unit or transport). */
-export function useActiveSelection(): { unitId: number | null; selection: OptionSelection } {
+/** The unit and option selection behind one half of the selected slot. */
+export function useSlotTarget(target: SlotTarget): {
+  unitId: number | null
+  selection: OptionSelection
+} {
   const slot = useSelectedSlot()
-  const target = useAppStore((s) => s.cardTarget)
   if (!slot) return { unitId: null, selection: {} }
   return target === 'transport'
     ? { unitId: slot.transportId, selection: slot.transportOptions }

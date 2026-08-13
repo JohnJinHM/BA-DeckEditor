@@ -4,6 +4,7 @@ import { thumbnailUrl } from '../assets'
 import { CATEGORY_BY_KEY } from '../deck/model'
 import type { DeckSlot } from '../deck/model'
 import { availabilityMap, slotCost, unitPrice } from '../deck/rules'
+import { resolveUnitLabel } from '../deck/label'
 import type { GameDb } from '../data/db'
 import { t } from './i18n'
 
@@ -57,20 +58,23 @@ export function SlotStrip() {
 }
 
 function FilledSlot({ db, slot, max }: { db: GameDb; slot: DeckSlot; max: number }) {
-  const unit = db.units.get(slot.unitId!)
-  const transport = slot.transportId != null ? db.units.get(slot.transportId) : null
+  // name and label art follow the chosen options, which can rename the unit,
+  // swap it outright (SSO → SSO 2) or override the thumbnail
+  const unit = resolveUnitLabel(db, slot.unitId!, slot.options)
+  const transport =
+    slot.transportId != null ? resolveUnitLabel(db, slot.transportId, slot.transportOptions) : null
   return (
     <>
-      <img className="slot-thumb" src={thumbnailUrl(unit?.ThumbnailFileName ?? null) ?? undefined} alt="" />
-      <span className="slot-name">{unit?.HUDName ?? unit?.Name ?? '—'}</span>
+      <img className="slot-thumb" src={thumbnailUrl(unit?.thumbnail ?? null) ?? undefined} alt="" />
+      <span className="slot-name">{unit?.name ?? '—'}</span>
       <span className="slot-meta">
         <span className={`slot-count ${slot.count > max ? 'invalid' : ''}`}>×{slot.count}</span>
         <span className="slot-cost">{slotCost(db, slot)}</span>
       </span>
       {transport && (
-        <span className="slot-transport" title={transport.HUDName ?? transport.Name ?? ''}>
-          {transport.HUDName ?? transport.Name} ×{slot.transportCount}
-          <em>{unitPrice(db, transport.Id, slot.transportOptions) * slot.transportCount}</em>
+        <span className="slot-transport" title={transport.name}>
+          {transport.name} ×{slot.transportCount}
+          <em>{unitPrice(db, transport.unit.Id, slot.transportOptions) * slot.transportCount}</em>
         </span>
       )}
     </>

@@ -168,7 +168,10 @@ function RemoveBtn({ onClick, className }: { onClick(): void; className?: string
   )
 }
 
-export function UnitCard({ card }: { card: CardModel }) {
+// BA-DeckEditor deviation from the BA-ReCard original: the root element's id
+// is a prop, so a slot's unit and its transport can render side by side
+// without colliding on a duplicate id.
+export function UnitCard({ card, id = 'unit-card-root' }: { card: CardModel; id?: string }) {
   const compact = useAppStore((s) => s.compact)
   const editMode = useAppStore((s) => s.editMode)
   const db = useAppStore((s) => s.db)
@@ -302,7 +305,7 @@ export function UnitCard({ card }: { card: CardModel }) {
 
   return (
     <SlotContext.Provider value={slots}>
-      <div className="card-root" id="unit-card-root">
+      <div className="card-root" id={id}>
       <div className="unit-card">
         <TopInfoBar card={card} />
         <div className="h-divider" />

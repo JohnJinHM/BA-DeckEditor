@@ -51,7 +51,7 @@ function normalize(json) {
 }
 
 const browser = await chromium.launch()
-const page = await browser.newPage()
+const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
 const problems = []
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`))
 await page.goto(BASE, { waitUntil: 'networkidle' })
@@ -109,49 +109,132 @@ await page.waitForSelector('.slot-strip')
 check((await totalSpent()) === 0, 'a new deck starts at 0 points')
 check((await page.locator('.slot-card').count()) === 7, 'recon has 7 slots (4 + 3)')
 
-// fill the first slot from the pool, then read the price back off the card
+// one click on a pool unit = one copy
 const first = page.locator('.pool-card:not([disabled])').first()
 const listed = Number(await first.locator('.pool-cost').innerText())
 await first.click()
-await page.waitForSelector('.slot-card.active .slot-name')
-const maxCopies = Number((await page.locator('.stepper-max').first().innerText()).replace('/ ', ''))
+await page.waitForSelector('.slot-card:not(.empty)')
+check((await totalSpent()) === listed, 'one click on a unit adds exactly one copy', String(listed))
 check(
-  (await totalSpent()) === listed * maxCopies,
-  'adding a unit charges its listed price × its availability',
-  `${listed} × ${maxCopies}`,
+  (await page.locator('.slot-card:not(.empty)').count()) === 1,
+  'the copy lands in a single slot',
 )
 
-// one fewer copy costs one unit less
-await page.locator('.stepper button', { hasText: '−' }).first().click()
+// clicking the same unit again steps that card's count up
+await first.click()
+check((await totalSpent()) === listed * 2, 'clicking the same unit again adds another copy')
 check(
-  (await totalSpent()) === listed * (maxCopies - 1),
-  'the quantity stepper reprices the slot',
+  (await page.locator('.slot-card:not(.empty)').count()) === 1,
+  'repeat clicks grow the existing card rather than filling a new slot',
+)
+check(
+  (await page.locator('.slot-card.active .slot-count').innerText()) === '×2',
+  'the slot shows the new count',
 )
 
-// a paid option adds exactly its delta
-const paid = page.locator('.card-panel .custom-row:not([disabled])').first()
+const copies = 2
+// a paid option adds exactly its delta, per copy
+const paid = page.locator('.customization-unit .custom-row:not([disabled])').first()
+/** Expand each customization row in `scope` until one offers a costed option
+ *  that isn't already selected, pick it, and return its delta. */
+const pickPaidOption = async (scope, label) => {
+  const rows = page.locator(`${scope} .custom-row:not([disabled])`)
+  for (let r = 0; r < (await rows.count()); r++) {
+    await rows.nth(r).scrollIntoViewIfNeeded()
+    await rows.nth(r).click()
+    const choices = page.locator(`${scope} .custom-choice`)
+    for (let i = 0; i < (await choices.count()); i++) {
+      const cost = await choices.nth(i).locator('.custom-cost').innerText()
+      const cls = (await choices.nth(i).getAttribute('class')) ?? ''
+      if (cost.startsWith('+') && !cls.includes('active')) {
+        await choices.nth(i).click()
+        return Number(cost.slice(1))
+      }
+    }
+    await rows.nth(r).click() // collapse and try the next slot
+  }
+  console.log(`  note  ${label}: no paid alternative to pick`)
+  return null
+}
+
 if ((await paid.count()) > 0) {
   const before = await totalSpent()
-  await paid.scrollIntoViewIfNeeded()
-  await paid.click()
-  const choices = page.locator('.custom-choice')
-  const n = await choices.count()
-  let picked = null
-  for (let i = 0; i < n; i++) {
-    const label = await choices.nth(i).locator('.custom-cost').innerText()
-    if (label.startsWith('+') && !(await choices.nth(i).getAttribute('class')).includes('active')) {
-      picked = Number(label.slice(1))
-      await choices.nth(i).click()
-      break
-    }
-  }
-  if (picked != null)
+  const delta = await pickPaidOption('.customization-unit', 'unit')
+  if (delta != null)
     check(
-      (await totalSpent()) === before + picked * (maxCopies - 1),
+      (await totalSpent()) === before + delta * copies,
       'a paid option adds its delta once per copy',
-      `+${picked} × ${maxCopies - 1}`,
+      `+${delta} × ${copies}`,
     )
 }
+
+// an infantry squad: pick a transport, then customize the vehicle too
+await page.locator('.category-row', { hasText: 'Infantry' }).click()
+await page.waitForTimeout(200)
+const squad = page.locator('.pool-card:not([disabled])').first()
+await squad.click()
+await squad.click()
+await page.waitForSelector('.transport-btn')
+const squadCopies = 2
+
+const transportBtn = page.locator('.transport-btn').nth(1)
+const before = await totalSpent()
+await transportBtn.click()
+await page.waitForSelector('#transport-card-root')
+const transportTotal = Number(await page.locator('.stepper-cost').nth(1).innerText())
+check(
+  (await totalSpent()) === before + transportTotal,
+  'adding a transport charges it once per squad copy',
+  `${transportTotal} for ${squadCopies}`,
+)
+check(
+  (await page.locator('#transport-card-root').count()) === 1,
+  'the transport gets its own unit card',
+)
+
+const withTransport = await totalSpent()
+const delta = await pickPaidOption('.customization-transport', 'transport')
+if (delta != null)
+  check(
+    (await totalSpent()) === withTransport + delta * squadCopies,
+    'the transport has its own customization options',
+    `+${delta} × ${squadCopies}`,
+  )
+
+// A variant that swaps the Units row must swap the label art with it. Scout
+// Snipers' "M107 AMR" is the USMC counterpart of the SSO case: the option
+// carries both ReplaceUnitId and ThumbnailOverride.
+await page.locator('.category-row', { hasText: 'Reconnaissance' }).click()
+await page.fill('.pool-search', 'Scout Snipers')
+await page.waitForSelector('.pool-card')
+await page.locator('.pool-card').first().click()
+await page.waitForSelector('.customization-unit')
+
+const nameBefore = await page.locator('.slot-card.active .slot-name').innerText()
+const thumbBefore = await page.locator('.slot-card.active .slot-thumb').getAttribute('src')
+const loadout = page.locator('.customization-unit .custom-row:not([disabled])').first()
+await loadout.scrollIntoViewIfNeeded()
+await loadout.click()
+await page.locator('.customization-unit .custom-choice:not(.active)').first().click()
+
+const thumbAfter = await page.locator('.slot-card.active .slot-thumb').getAttribute('src')
+check(thumbAfter !== thumbBefore, 'a unit-swapping variant updates the slot thumbnail',
+  `${thumbBefore?.split('/').pop()} → ${thumbAfter?.split('/').pop()}`)
+check(
+  thumbAfter?.includes('M107'),
+  'the thumbnail is the variant’s own label art',
+  String(thumbAfter?.split('/').pop()),
+)
+check(
+  (await page.locator('.slot-card.active .slot-name').innerText()) !== nameBefore ||
+    thumbAfter !== thumbBefore,
+  'the slot reflects the variant',
+)
+check(
+  (await page.locator('.pool-card.in-deck .pool-thumb').first().getAttribute('src')) ===
+    thumbBefore,
+  'the pool keeps showing the default loadout’s art',
+)
 
 // export what we built and read it straight back in
 const built = page.waitForEvent('download')

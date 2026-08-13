@@ -1,0 +1,93 @@
+/* "Customization options" — the panel the game docks under a unit info card.
+   Rendered inside a `.card-root`, so it inherits that block's 408px width and
+   palette variables (card/card.css) and reads as part of the same card. */
+
+.customization {
+  width: 408px;
+  background: var(--c-panel);
+  border: 1px solid var(--c-text);
+  outline: 1px solid rgba(231, 248, 229, 0.25);
+  color: var(--c-text);
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.03em;
+  box-sizing: border-box;
+}
+.customization * { box-sizing: border-box; }
+
+.customization h3 {
+  padding: 7px 0;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.custom-group + .custom-group .custom-row { border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.custom-group:nth-child(even) .custom-row { background: rgba(255, 255, 255, 0.05); }
+
+.custom-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1.5fr) 46px;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 39px;
+  padding: 4px 10px;
+  background: none;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: 14px;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.custom-row:hover:not(:disabled) { background: rgba(244, 212, 42, 0.14); }
+.custom-row:disabled { cursor: default; }
+.custom-group.expanded .custom-row { background: rgba(244, 212, 42, 0.16); }
+
+.custom-icon { width: 24px; height: 24px; object-fit: contain; }
+.custom-slot {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.custom-option { text-align: right; line-height: 1.2; }
+.custom-cost {
+  color: var(--c-yellow);
+  font-weight: 700;
+  font-size: 15px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* the expanded slot's choices, indented under their row */
+.custom-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 10px 6px 44px;
+  background: rgba(0, 0, 0, 0.4);
+}
+.custom-choice {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 46px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.custom-choice:hover { border-color: rgba(231, 248, 229, 0.45); }
+.custom-choice.active { border-color: var(--c-yellow); }
+.custom-choice-art { width: 64px; height: 26px; object-fit: contain; }
+.custom-choice-name { overflow: hidden; text-overflow: ellipsis; line-height: 1.25; }

@@ -1,25 +1,29 @@
+import { useMemo } from 'react'
 import { useAppStore, useSelectedSlot } from '../state/store'
 import { chromeUrl, thumbnailUrl } from '../assets'
-import { availabilityMap, unitPrice } from '../deck/rules'
+import { availabilityMap, defaultSelection, unitPrice } from '../deck/rules'
+import { resolveUnitLabel } from '../deck/label'
 import { t } from './i18n'
 
 /** Quantity stepper + transport picker for the selected slot — the two knobs
- *  the .dek stores per card besides the option list (`count`/`tranCount`). */
+ *  the .dek stores per card besides the option lists (`count`/`tranCount`). */
 export function SlotEditor() {
   const db = useAppStore((s) => s.db)!
   const lang = useAppStore((s) => s.lang)
   const deck = useAppStore((s) => s.deck)!
   const slot = useSelectedSlot()
-  const cardTarget = useAppStore((s) => s.cardTarget)
-  const setCardTarget = useAppStore((s) => s.setCardTarget)
   const setSlotCount = useAppStore((s) => s.setSlotCount)
   const setTransport = useAppStore((s) => s.setTransport)
   const setTransportCount = useAppStore((s) => s.setTransportCount)
+  const availability = useMemo(
+    () => availabilityMap(db, [deck.spec1, deck.spec2]),
+    [db, deck.spec1, deck.spec2],
+  )
 
   if (!slot || slot.unitId == null) return null
-  const availability = availabilityMap(db, [deck.spec1, deck.spec2]).get(slot.unitId)
-  const max = availability?.max ?? 1
-  const transports = availability?.transports ?? []
+  const entry = availability.get(slot.unitId)
+  const max = entry?.max ?? 1
+  const transports = entry?.transports ?? []
 
   return (
     <section className="slot-editor">
@@ -45,15 +49,21 @@ export function SlotEditor() {
                 <span>{db.locOr('ui_deck_unit_on_foot', 'On foot')}</span>
               </button>
               {transports.map((id) => {
-                const u = db.units.get(id)
+                // the picked transport shows its configured variant art, the
+                // rest the loadout they would arrive with
+                const label = resolveUnitLabel(
+                  db,
+                  id,
+                  slot.transportId === id ? slot.transportOptions : defaultSelection(db, id),
+                )
                 return (
                   <button
                     key={id}
                     className={`transport-btn ${slot.transportId === id ? 'active' : ''}`}
                     onClick={() => setTransport(id)}
                   >
-                    <img src={thumbnailUrl(u?.ThumbnailFileName ?? null) ?? undefined} alt="" />
-                    <span>{u?.HUDName ?? u?.Name ?? id}</span>
+                    <img src={thumbnailUrl(label?.thumbnail ?? null) ?? undefined} alt="" />
+                    <span>{label?.name ?? id}</span>
                   </button>
                 )
               })}
@@ -71,23 +81,6 @@ export function SlotEditor() {
             />
           )}
         </>
-      )}
-
-      {slot.transportId != null && (
-        <div className="card-target-toggle">
-          <button
-            className={cardTarget === 'unit' ? 'active' : ''}
-            onClick={() => setCardTarget('unit')}
-          >
-            {t(lang, 'unitCard')}
-          </button>
-          <button
-            className={cardTarget === 'transport' ? 'active' : ''}
-            onClick={() => setCardTarget('transport')}
-          >
-            {t(lang, 'transportCard')}
-          </button>
-        </div>
       )}
     </section>
   )

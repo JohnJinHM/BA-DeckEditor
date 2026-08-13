@@ -53,12 +53,25 @@ await page.locator('.category-row', { hasText: 'Aircraft' }).click()
 await page.waitForTimeout(300)
 await page.locator('.slot-strip .slot-card').first().click()
 await page.waitForTimeout(400)
-const row = page.locator('.card-panel .custom-row:not([disabled])').first()
+const row = page.locator('.card-panel .custom-row:not([disabled])').nth(1)
 await row.scrollIntoViewIfNeeded()
 await row.click()
 await page.waitForTimeout(300)
+await page.locator('.customization-unit').scrollIntoViewIfNeeded()
 await page.locator('.card-panel').screenshot({ path: join(OUT, '4-customization.png') })
 await page.screenshot({ path: join(OUT, '5-aircraft.png') })
+
+// 5. an infantry squad with a transport — unit card + transport card stacked
+await page.locator('.category-row', { hasText: 'Infantry' }).click()
+await page.waitForTimeout(300)
+await page.locator('.slot-strip .slot-card').nth(1).click()
+await page.waitForTimeout(500)
+await page.locator('#transport-card-root').scrollIntoViewIfNeeded()
+await page.waitForTimeout(300)
+await page.locator('.card-panel').screenshot({
+  path: join(OUT, '7-transport-card.png'),
+  scale: 'css',
+})
 
 // 5. spec chooser
 await page.click('.specs-chip')
