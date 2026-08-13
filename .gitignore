@@ -1,0 +1,19 @@
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+*.log
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+
+# scripts/dev-screenshot.mjs output
+.shots/
+
+# public/data and public/assets ARE committed — the deployed site serves them
+# directly, and GitHub Pages builds from the repo. Regenerate them with
+# scripts/extract-assets.mjs and the BA-Units extractor (see README).

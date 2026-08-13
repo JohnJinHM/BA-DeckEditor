@@ -1,0 +1,975 @@
+import { createContext, Fragment, useContext, useMemo, useState } from 'react'
+import type { AmmoModel, CardModel, WeaponModel } from './model'
+import { emptyWeapon, emptyAmmo, emptyTag, removeIndexedColors } from './model'
+import { EditableText } from './EditableText'
+import { ammoIconUrl, chromeUrl, iconUrl, isUploadedImage, portraitUrl, weaponIconUrl } from '../assets'
+import { useAppStore } from '../state/store'
+import { WeaponType, WeaponTypeLocKey } from '../data/enums'
+import { ColorableIcon } from '../ui/ColorableIcon'
+import { PickerDialog, type PickerItem } from '../ui/PickerDialog'
+import { TAG_ICON_NAMES, prettyIconName } from '../ui/iconLibrary'
+import { t } from '../ui/i18n'
+import './card.css'
+
+// Layout mirrors the game's "Unit Info Card" prefab: 408x710, top hero bar
+// 274px (210px portrait + 64px stats strip), 1px divider, bottom weapons area.
+// Geometry from docs/extracted/PREFAB_LAYOUT.md, refined against /samples.
+
+function Img({ src, className, alt, style }: {
+  src: string | null
+  className?: string
+  alt?: string
+  style?: React.CSSProperties
+}) {
+  // track WHICH src failed — components are reused across unit switches
+  // (index keys), so a sticky boolean would blank icons of the next unit
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  if (!src || failedSrc === src)
+    return <span className={`${className ?? ''} img-missing`} title={alt} />
+  return (
+    <img src={src} className={className} alt={alt ?? ''} style={style} onError={() => setFailedSrc(src)} />
+  )
+}
+
+// ── Slot-editing plumbing (add/remove/pick), shared across the card ─────────
+// Number of customizable tag-icon slots in the portrait's right column.
+const TAG_SLOTS = 4
+
+interface SlotCtx {
+  openWeaponPicker(index: number): void
+  openTagPicker(index: number): void
+  openAmmoPicker(weaponIndex: number, ammoIndex: number): void
+  addWeapon(): void
+  removeWeapon(index: number): void
+  addAmmo(weaponIndex: number): void
+  removeAmmo(weaponIndex: number, ammoIndex: number): void
+}
+const SlotContext = createContext<SlotCtx | null>(null)
+const useSlots = () => useContext(SlotContext)!
+
+/** Weapon count badge; editable (number only) in edit mode. */
+function WeaponCount({ value, onChange }: { value: string; onChange(v: string): void }) {
+  const editMode = useAppStore((s) => s.editMode)
+  if (!editMode) return value ? <span className="weapon-count">{value}</span> : null
+  const num = value.replace(/\D/g, '')
+  return (
+    <span className={`weapon-count count-edit ${num ? '' : 'empty'}`}>
+      x
+      <EditableText
+        className="count-num"
+        value={num}
+        onChange={(v) => {
+          const n = parseInt(v.replace(/\D/g, ''), 10)
+          onChange(Number.isFinite(n) && n > 1 ? `x${n}` : '')
+        }}
+      />
+    </span>
+  )
+}
+
+/** Green value pill under a tag icon (e.g. smoke x8, ECM -50%); editable. */
+function TagPill({ value, colorKey, onChange }: {
+  value: string
+  colorKey: string
+  onChange(v: string): void
+}) {
+  const editMode = useAppStore((s) => s.editMode)
+  // empty pills only exist as edit-mode placeholders; EditableText renders the
+  // filled ones in both modes so a recolored pill keeps its color on export
+  if (!editMode && !value) return null
+  return (
+    <EditableText
+      className={`tag-pill ${value ? '' : 'empty'}`}
+      value={value}
+      colorKey={colorKey}
+      onChange={onChange}
+    />
+  )
+}
+
+/** Weapon silhouette (list or compact row), wrapped in its picker while
+ *  editing. Recolorable like any icon — the picker click still gets through. */
+function WeaponIcon({ weapon, index, className }: {
+  weapon: WeaponModel
+  index: number
+  className: string
+}) {
+  const editMode = useAppStore((s) => s.editMode)
+  const lang = useAppStore((s) => s.lang)
+  const slots = useSlots()
+  const icon = (
+    <ColorableIcon
+      className={`${className} ${isUploadedImage(weapon.icon) ? 'no-flip' : ''}`}
+      src={weaponIconUrl(weapon.icon)}
+      alt={weapon.name}
+      colorKey={`weapon.${index}.icon`}
+    />
+  )
+  if (!editMode) return icon
+  return (
+    <button
+      className="weapon-icon-btn"
+      title={t(lang, 'changeWeapon')}
+      onClick={(e) => {
+        // the expanded list wraps this in a "select weapon" row
+        e.stopPropagation()
+        slots.openWeaponPicker(index)
+      }}
+    >
+      {icon}
+    </button>
+  )
+}
+
+/** Ammo silhouette, wrapped in its picker while editing. */
+function AmmoIcon({ ammo, weaponIndex, ammoIndex, btnClassName }: {
+  ammo: AmmoModel
+  weaponIndex: number
+  ammoIndex: number
+  btnClassName?: string
+}) {
+  const editMode = useAppStore((s) => s.editMode)
+  const lang = useAppStore((s) => s.lang)
+  const slots = useSlots()
+  const icon = (
+    <ColorableIcon
+      className="ammo-image"
+      src={ammoIconUrl(ammo.icon)}
+      alt={ammo.name}
+      colorKey={`weapon.${weaponIndex}.ammo.${ammoIndex}.icon`}
+    />
+  )
+  if (!editMode) return icon
+  return (
+    <button
+      className={`weapon-icon-btn ${btnClassName ?? ''}`}
+      title={t(lang, 'changeAmmo')}
+      onClick={() => slots.openAmmoPicker(weaponIndex, ammoIndex)}
+    >
+      {icon}
+    </button>
+  )
+}
+
+/** Small "×" button to remove a slot (edit mode only). */
+function RemoveBtn({ onClick, className }: { onClick(): void; className?: string }) {
+  const lang = useAppStore((s) => s.lang)
+  return (
+    <button
+      className={`slot-remove edit-chrome ${className ?? ''}`}
+      title={t(lang, 'remove')}
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick()
+      }}
+    >
+      ×
+    </button>
+  )
+}
+
+export function UnitCard({ card }: { card: CardModel }) {
+  const compact = useAppStore((s) => s.compact)
+  const editMode = useAppStore((s) => s.editMode)
+  const db = useAppStore((s) => s.db)
+  const lang = useAppStore((s) => s.lang)
+  const update = useAppStore((s) => s.updateCard)
+  const [selectedWeapon, setSelectedWeapon] = useState(0)
+  const weaponIdx = Math.min(selectedWeapon, card.weapons.length - 1)
+  const weapon = card.weapons[weaponIdx] ?? null
+
+  // picker target: which slot the picker dialog is filling
+  const [picker, setPicker] = useState<
+    | { kind: 'weapon'; index: number }
+    | { kind: 'tag'; index: number }
+    | { kind: 'ammo'; weaponIndex: number; ammoIndex: number }
+    | null
+  >(null)
+
+  const weaponItems = useMemo<PickerItem[]>(() => {
+    if (!db) return []
+    const seen = new Set<string>()
+    const items: PickerItem[] = []
+    for (const w of db.tables.Weapons) {
+      const key = `${w.HUDIcon}|${w.HUDName}|${w.Type}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      items.push({
+        key: String(w.Id),
+        label: db.cardLoc(w.HUDName) || w.Name || w.HUDIcon || `Weapon ${w.Id}`,
+        url: weaponIconUrl(w.HUDIcon),
+      })
+    }
+    return items.sort((a, b) => a.label.localeCompare(b.label))
+  }, [db])
+
+  const ammoItems = useMemo<PickerItem[]>(() => {
+    if (!db) return []
+    const seen = new Set<string>()
+    const items: PickerItem[] = []
+    for (const a of db.tables.Ammunitions) {
+      const key = `${a.HUDIcon}|${a.HUDName}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      items.push({
+        key: String(a.Id),
+        label: db.cardLoc(a.HUDName) || a.Name || a.HUDIcon || `Ammo ${a.Id}`,
+        url: ammoIconUrl(a.HUDIcon),
+      })
+    }
+    return items.sort((a, b) => a.label.localeCompare(b.label))
+  }, [db])
+
+  const tagItems = useMemo<PickerItem[]>(
+    () => TAG_ICON_NAMES.map((n) => ({ key: n, label: prettyIconName(n), url: iconUrl(n) })),
+    [],
+  )
+
+  const slots: SlotCtx = {
+    openWeaponPicker: (index) => setPicker({ kind: 'weapon', index }),
+    openTagPicker: (index) => setPicker({ kind: 'tag', index }),
+    openAmmoPicker: (weaponIndex, ammoIndex) => setPicker({ kind: 'ammo', weaponIndex, ammoIndex }),
+    addWeapon: () => update((c) => void c.weapons.push(emptyWeapon())),
+    removeWeapon: (index) =>
+      update((c) => {
+        c.weapons.splice(index, 1)
+        removeIndexedColors(c, 'weapon.', index)
+      }),
+    addAmmo: (wi) => update((c) => void c.weapons[wi]?.ammo.push(emptyAmmo())),
+    removeAmmo: (wi, ai) =>
+      update((c) => {
+        if (!c.weapons[wi]) return
+        c.weapons[wi].ammo.splice(ai, 1)
+        removeIndexedColors(c, `weapon.${wi}.ammo.`, ai)
+      }),
+  }
+
+  function pickWeapon(weaponId: string) {
+    if (picker?.kind !== 'weapon' || !db) return
+    const w = db.weapons.get(Number(weaponId))
+    const index = picker.index
+    if (w)
+      update((c) => {
+        const slot = c.weapons[index]
+        if (!slot) return
+        slot.icon = w.HUDIcon
+        slot.name = db.cardLoc(w.HUDName) || w.Name || slot.name
+        slot.typeLabel = db.cardLocOr(WeaponTypeLocKey[w.Type], WeaponType[w.Type] ?? slot.typeLabel)
+      })
+    setPicker(null)
+  }
+
+  function uploadWeapon(dataUrl: string) {
+    if (picker?.kind !== 'weapon') return
+    const index = picker.index
+    update((c) => void (c.weapons[index] && (c.weapons[index]!.icon = dataUrl)))
+    setPicker(null)
+  }
+
+  function pickAmmo(ammoId: string) {
+    if (picker?.kind !== 'ammo' || !db) return
+    const a = db.ammunitions.get(Number(ammoId))
+    const { weaponIndex, ammoIndex } = picker
+    if (a)
+      update((c) => {
+        const slot = c.weapons[weaponIndex]?.ammo[ammoIndex]
+        if (!slot) return
+        slot.icon = a.HUDIcon
+        slot.name = db.cardLoc(a.HUDName) || a.Name || slot.name
+      })
+    setPicker(null)
+  }
+
+  function uploadAmmo(dataUrl: string) {
+    if (picker?.kind !== 'ammo') return
+    const { weaponIndex, ammoIndex } = picker
+    update((c) => {
+      const slot = c.weapons[weaponIndex]?.ammo[ammoIndex]
+      if (slot) slot.icon = dataUrl
+    })
+    setPicker(null)
+  }
+
+  function setTag(index: number, icon: string | null, name: string) {
+    update((c) => {
+      while (c.tags.length < TAG_SLOTS) c.tags.push(emptyTag())
+      // keep the detail pill when swapping icons, drop it when clearing the slot
+      c.tags[index] = { icon, name, detail: icon ? c.tags[index]?.detail ?? '' : '' }
+      // drop trailing empties so view mode / export stay clean
+      while (c.tags.length && !c.tags[c.tags.length - 1]!.icon) c.tags.pop()
+    })
+  }
+
+  return (
+    <SlotContext.Provider value={slots}>
+      <div className="card-root" id="unit-card-root">
+      <div className="unit-card">
+        <TopInfoBar card={card} />
+        <div className="h-divider" />
+        {card.weapons.length === 0 ? (
+          editMode ? (
+            <div className="bottom-empty-bar">
+              <button className="add-weapon-btn edit-chrome" onClick={slots.addWeapon}>
+                {t(lang, 'addWeapon')}
+              </button>
+            </div>
+          ) : (
+            <div className="bottom-empty-bar">
+              {db?.cardLocOr('ui_infocard_no_weapons', 'Unit has no weapons') ?? 'Unit has no weapons'}
+            </div>
+          )
+        ) : compact ? (
+          <BottomCompactBar card={card} />
+        ) : (
+          <div className="bottom-info-bar">
+            <div className="weapon-list">
+              {card.weapons.map((w, i) => (
+                <div className="weapon-list-item" key={i}>
+                  <div
+                    className={`weapon-list-btn ${i === weaponIdx ? 'active' : ''}`}
+                    role="button"
+                    onClick={() => setSelectedWeapon(i)}
+                  >
+                    <WeaponCount
+                      value={w.count}
+                      onChange={(v) => update((c) => void (c.weapons[i]!.count = v))}
+                    />
+                    <WeaponIcon weapon={w} index={i} className="weapon-list-icon" />
+                    <EditableText
+                      className="weapon-list-name"
+                      value={w.name}
+                      colorKey={`weapon.${i}.name`}
+                      onChange={(v) => update((c) => void (c.weapons[i]!.name = v))}
+                    />
+                  </div>
+                  {editMode && <RemoveBtn onClick={() => slots.removeWeapon(i)} />}
+                </div>
+              ))}
+              {editMode && (
+                <button className="add-weapon-btn list edit-chrome" onClick={slots.addWeapon}>
+                  {t(lang, 'addWeaponShort')}
+                </button>
+              )}
+            </div>
+            <div className="v-divider" />
+            {weapon && <WeaponDetail weapon={weapon} index={weaponIdx} aircraft={card.aircraft} />}
+          </div>
+        )}
+      </div>
+      </div>
+
+      {picker?.kind === 'weapon' && (
+        <PickerDialog
+          title={t(lang, 'selectWeapon')}
+          items={weaponItems}
+          iconClassName="mirror"
+          onPick={pickWeapon}
+          onUpload={uploadWeapon}
+          onCancel={() => setPicker(null)}
+        />
+      )}
+      {picker?.kind === 'ammo' && (
+        <PickerDialog
+          title={t(lang, 'selectAmmo')}
+          items={ammoItems}
+          onPick={pickAmmo}
+          onUpload={uploadAmmo}
+          onCancel={() => setPicker(null)}
+        />
+      )}
+      {picker?.kind === 'tag' && (
+        <PickerDialog
+          title={t(lang, 'selectTagIcon')}
+          items={tagItems}
+          onPick={(key) => {
+            setTag(picker.index, key, prettyIconName(key))
+            setPicker(null)
+          }}
+          onUpload={(dataUrl) => {
+            setTag(picker.index, dataUrl, 'Custom tag')
+            setPicker(null)
+          }}
+          onClear={() => {
+            setTag(picker.index, null, '')
+            setPicker(null)
+          }}
+          onCancel={() => setPicker(null)}
+        />
+      )}
+    </SlotContext.Provider>
+  )
+}
+
+function TopInfoBar({ card }: { card: CardModel }) {
+  const update = useAppStore((s) => s.updateCard)
+  const editMode = useAppStore((s) => s.editMode)
+  const style = useAppStore((s) => s.style)
+  const lang = useAppStore((s) => s.lang)
+  const slots = useSlots()
+  // The right column holds at most TAG_SLOTS icons total; resolved abilities
+  // take priority and the editable tag slots fill only the room that remains.
+  const abilities = card.abilities
+  const tagCapacity = Math.max(0, TAG_SLOTS - abilities.length)
+  // keep each tag's slot index: color overrides are keyed by it, so filtering
+  // for view mode must not renumber them out from under the edited colors
+  const shownTags = card.tags
+    .map((tag, index) => ({ tag, index }))
+    .filter(({ tag }) => tag.icon)
+    .slice(0, tagCapacity)
+  const showTagsCol = abilities.length > 0 || shownTags.length > 0 || (editMode && tagCapacity > 0)
+  return (
+    <div className="top-info-bar">
+      <div className="hero">
+        <Img className="hero-portrait" src={portraitUrl(card.portrait)} alt={card.name} />
+        <img className="hero-gradient top" src={chromeUrl('Unit Info Card Background Top')} alt="" />
+        <img className="hero-gradient right" src={chromeUrl('Unit Info Card Background Right')} alt="" />
+        <img className="hero-gradient bottom" src={chromeUrl('Unit Info Card Background Bottom')} alt="" />
+
+        <div className="name-points-row">
+          <EditableText
+            className="unit-name"
+            value={card.name}
+            colorKey="name"
+            onChange={(v) => update((c) => void (c.name = v))}
+          />
+          <div className="points-block">
+            <EditableText
+              className="points-value"
+              value={card.cost}
+              colorKey="cost"
+              onChange={(v) => update((c) => void (c.cost = v))}
+            />
+            <ColorableIcon
+              className="points-icon"
+              src={iconUrl('Points Icon')}
+              colorKey="points.icon"
+              tint="#f4d42a"
+              title="points"
+            />
+          </div>
+        </div>
+
+        {card.armorOverlay && card.armor && (
+          <div className="armor-type-icons">
+            <ColorableIcon
+              className="armor-type-icon"
+              src={iconUrl('Kinetic Armor Icon')}
+              colorKey="armorType.kin.icon"
+              tint="#e7f8e5"
+              title="Kinetic armor"
+            />
+            <ColorableIcon
+              className="armor-type-icon"
+              src={iconUrl('HEAT Armor Icon')}
+              colorKey="armorType.heat.icon"
+              tint="#f66b06"
+              title="HEAT armor"
+            />
+          </div>
+        )}
+        {card.armorOverlay && card.armor && <ArmorOverlay card={card} />}
+
+        <div className="right-strip-divider" />
+        {showTagsCol && (
+          <div className="tags-col">
+            {editMode
+              ? Array.from({ length: tagCapacity }, (_, i) => {
+                  const tag = card.tags[i]
+                  if (tag?.icon)
+                    return (
+                      <span className="tag-item" key={`t${i}`} title={tag.name}>
+                        <button
+                          className="tag-edit-btn"
+                          title={t(lang, 'changeTag')}
+                          onClick={() => slots.openTagPicker(i)}
+                        >
+                          <ColorableIcon
+                            className="tag-icon"
+                            src={iconUrl(tag.icon)}
+                            alt={tag.name}
+                            colorKey={`tag.${i}.icon`}
+                          />
+                          <span className="tag-edit-hint edit-chrome">✎</span>
+                        </button>
+                        <TagPill
+                          value={tag.detail}
+                          colorKey={`tag.${i}.detail`}
+                          onChange={(v) => update((c) => void (c.tags[i] && (c.tags[i]!.detail = v)))}
+                        />
+                      </span>
+                    )
+                  return (
+                    <button
+                      className="tag-item tag-placeholder edit-chrome"
+                      key={`t${i}`}
+                      title={t(lang, 'addTagIcon')}
+                      onClick={() => slots.openTagPicker(i)}
+                    >
+                      +
+                    </button>
+                  )
+                })
+              : shownTags.map(({ tag, index }) => (
+                  <span className="tag-item" key={`t${index}`} title={tag.name}>
+                    <ColorableIcon
+                      className="tag-icon"
+                      src={iconUrl(tag.icon)}
+                      alt={tag.name}
+                      colorKey={`tag.${index}.icon`}
+                    />
+                    <TagPill
+                      value={tag.detail}
+                      colorKey={`tag.${index}.detail`}
+                      onChange={(v) => update((c) => void (c.tags[index] && (c.tags[index]!.detail = v)))}
+                    />
+                  </span>
+                ))}
+            {abilities.map((a, i) => (
+              <span className="tag-item" key={`a${i}`} title={a.name}>
+                <ColorableIcon
+                  className="tag-icon"
+                  src={iconUrl(a.icon)}
+                  alt={a.name}
+                  colorKey={`ability.${i}.icon`}
+                />
+                <TagPill
+                  value={a.detail}
+                  colorKey={`ability.${i}.detail`}
+                  onChange={(v) => update((c) => void (c.abilities[i]!.detail = v))}
+                />
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="stats-divider" />
+        <div className="stats-strip">
+          {card.stats.map((s, i) => (
+            <div className="stat-item" key={i} title={s.label}>
+              <ColorableIcon
+                className="stat-icon"
+                src={iconUrl(s.icon)}
+                alt={s.label}
+                colorKey={`stat.${i}.icon`}
+              />
+              <EditableText
+                className="stat-caption"
+                value={s.value}
+                colorKey={`stat.${i}.value`}
+                onChange={(v) => update((c) => void (c.stats[i]!.value = v))}
+              />
+            </div>
+          ))}
+          {/* new style: "return to battlegroup delay" (clock+skull), appended
+              as the last stat */}
+          {style === 'new' && card.deathTimer && (
+            <div className="stat-item" title="Return to battlegroup delay">
+              <ColorableIcon
+                className="stat-icon"
+                src={iconUrl('DeathTimer')}
+                alt="Return to battlegroup delay"
+                colorKey="stat.deathTimer.icon"
+              />
+              <EditableText
+                className="stat-caption"
+                value={card.deathTimer}
+                colorKey="stat.deathTimer.value"
+                onChange={(v) => update((c) => void (c.deathTimer = v))}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ArmorOverlay({ card }: { card: CardModel }) {
+  return (
+    <div className="armor-overlay">
+      <ArmorBlock card={card} facing="top" className="pos-top" layout="row" />
+      <ArmorBlock card={card} facing="rear" className="pos-rear" layout="col" />
+      <ArmorBlock card={card} facing="front" className="pos-front" layout="col" />
+      <ArmorBlock card={card} facing="sides" className="pos-sides" layout="row" />
+    </div>
+  )
+}
+
+function ArmorBlock({ card, facing, className, layout }: {
+  card: CardModel
+  facing: 'front' | 'sides' | 'rear' | 'top'
+  className: string
+  layout: 'row' | 'col'
+}) {
+  const update = useAppStore((s) => s.updateCard)
+  const f = card.armor![facing]
+  return (
+    <div className={`armor-block ${className}`}>
+      <EditableText
+        className="armor-title"
+        value={card.armorLabels[facing]}
+        colorKey={`armorLabel.${facing}`}
+        onChange={(v) => update((c) => void (c.armorLabels[facing] = v))}
+      />
+      <div className={`armor-values ${layout}`}>
+        <EditableText
+          className="armor-kin"
+          value={f.kinetic}
+          colorKey={`armor.${facing}.kin`}
+          onChange={(v) => update((c) => void (c.armor![facing].kinetic = v))}
+        />
+        <EditableText
+          className="armor-heat"
+          value={f.heat}
+          colorKey={`armor.${facing}.heat`}
+          onChange={(v) => update((c) => void (c.armor![facing].heat = v))}
+        />
+      </div>
+    </div>
+  )
+}
+
+function WeaponDetail({
+  weapon,
+  index,
+  aircraft,
+}: {
+  weapon: WeaponModel
+  index: number
+  aircraft: boolean
+}) {
+  const update = useAppStore((s) => s.updateCard)
+  const editMode = useAppStore((s) => s.editMode)
+  const style = useAppStore((s) => s.style)
+  const lang = useAppStore((s) => s.lang)
+  const slots = useSlots()
+  return (
+    <div className="weapon-detail">
+      <div className="weapon-top-bar">
+        <EditableText
+          className="weapon-title"
+          value={weapon.typeLabel || weapon.name}
+          colorKey={`weapon.${index}.type`}
+          onChange={(v) => update((c) => void (c.weapons[index]!.typeLabel = v))}
+        />
+        {/* trait icons at the top-right of the detail header; Suppressed/CQC
+            (newTraits) are the new style's only addition to the detail view.
+            Rendered white here (they show green only on the compact overlay). */}
+        <div className="weapon-traits">
+          {weapon.traits.map((t, i) => (
+            <ColorableIcon
+              key={i}
+              className="trait-icon"
+              src={iconUrl(t.icon)}
+              alt={t.tooltip}
+              colorKey={`weapon.${index}.trait.${i}.icon`}
+            />
+          ))}
+          {style === 'new' &&
+            (weapon.newTraits ?? []).map((t, i) => (
+              <ColorableIcon
+                key={`n${i}`}
+                className="trait-icon"
+                src={iconUrl(t.icon)}
+                alt={t.tooltip}
+                colorKey={`weapon.${index}.newtrait.${i}.icon`}
+              />
+            ))}
+        </div>
+      </div>
+
+      <div className="weapon-stats">
+        {weapon.stats.map((s, si) => (
+          <div className="stats-item" key={si}>
+            <EditableText
+              className="stats-item-label"
+              value={s.label}
+              colorKey={`weapon.${index}.stat.${si}.label`}
+              onChange={(v) => update((c) => void (c.weapons[index]!.stats[si]!.label = v))}
+            />
+            <EditableText
+              className="stats-item-value"
+              value={s.value}
+              colorKey={`weapon.${index}.stat.${si}.value`}
+              onChange={(v) => update((c) => void (c.weapons[index]!.stats[si]!.value = v))}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="ammo-block">
+        {weapon.ammo.map((a, ai) => (
+          <div className="ammo-info" key={ai}>
+            <div className="ammo-top-row">
+              {/* plane missiles/bombs drop the redundant ammo silhouette (the
+                  weapon icon already is the munition); guns/rockets and
+                  ground/heli keep it */}
+              {aircraft && a.selfPropelled ? null : (
+                <AmmoIcon ammo={a} weaponIndex={index} ammoIndex={ai} />
+              )}
+              <EditableText
+                className="ammo-title"
+                value={a.name}
+                colorKey={`weapon.${index}.ammo.${ai}.name`}
+                onChange={(v) => update((c) => void (c.weapons[index]!.ammo[ai]!.name = v))}
+              />
+              <EditableText
+                className="ammo-count"
+                value={a.quantity}
+                colorKey={`weapon.${index}.ammo.${ai}.qty`}
+                onChange={(v) => update((c) => void (c.weapons[index]!.ammo[ai]!.quantity = v))}
+              />
+              {editMode && (
+                <RemoveBtn className="inline" onClick={() => slots.removeAmmo(index, ai)} />
+              )}
+            </div>
+            {a.traits.length > 0 && (
+              <div className="ammo-traits">
+                {a.traits.map((tr, ti) => (
+                  <ColorableIcon
+                    key={ti}
+                    className="trait-icon"
+                    src={iconUrl(tr.icon)}
+                    alt={tr.tooltip}
+                    colorKey={`weapon.${index}.ammo.${ai}.trait.${ti}.icon`}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="ammo-stats">
+              {a.stats.map((s, si) => (
+                <Fragment key={si}>
+                  <div className="stats-item">
+                    <EditableText
+                      className="stats-item-label"
+                      value={s.label}
+                      colorKey={`weapon.${index}.ammo.${ai}.stat.${si}.label`}
+                      onChange={(v) =>
+                        update((c) => void (c.weapons[index]!.ammo[ai]!.stats[si]!.label = v))
+                      }
+                    />
+                    <EditableText
+                      className="stats-item-value"
+                      value={s.value}
+                      colorKey={`weapon.${index}.ammo.${ai}.stat.${si}.value`}
+                      onChange={(v) =>
+                        update((c) => void (c.weapons[index]!.ammo[ai]!.stats[si]!.value = v))
+                      }
+                    />
+                  </div>
+                  {/* guidance as a text row directly under "Shell trajectory" */}
+                  {si === 0 && style === 'new' && a.guidanceLabel && (
+                    <div className="stats-item">
+                      <span className="stats-item-label">Guidance</span>
+                      <EditableText
+                        className="stats-item-value"
+                        value={a.guidanceLabel}
+                        colorKey={`weapon.${index}.ammo.${ai}.guidancelabel`}
+                        onChange={(v) =>
+                          update((c) => void (c.weapons[index]!.ammo[ai]!.guidanceLabel = v))
+                        }
+                      />
+                    </div>
+                  )}
+                </Fragment>
+              ))}
+              {/* no stats at all but guided → still show the guidance row */}
+              {style === 'new' && a.guidanceLabel && a.stats.length === 0 && (
+                <div className="stats-item">
+                  <span className="stats-item-label">Guidance</span>
+                  <span className="stats-item-value">{a.guidanceLabel}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        {editMode && (
+          <button className="add-weapon-btn ammo edit-chrome" onClick={() => slots.addAmmo(index)}>
+            {t(lang, 'addAmmo')}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function BottomCompactBar({ card }: { card: CardModel }) {
+  const update = useAppStore((s) => s.updateCard)
+  const editMode = useAppStore((s) => s.editMode)
+  const style = useAppStore((s) => s.style)
+  const lang = useAppStore((s) => s.lang)
+  const slots = useSlots()
+  return (
+    <div className={`bottom-compact-bar ${style === 'new' ? 'new' : ''}`}>
+      <div className="compact-grid compact-header">
+        <span />
+        <ColorableIcon
+          className="compact-header-icon"
+          src={chromeUrl('Penetration Icon')}
+          alt="Penetration"
+          title="Penetration"
+          colorKey="compact.pen.icon"
+        />
+        <ColorableIcon
+          className="compact-header-icon"
+          src={chromeUrl('Damage Icon')}
+          alt="Damage"
+          title="Damage"
+          colorKey="compact.dmg.icon"
+        />
+        <ColorableIcon
+          className="compact-header-icon"
+          src={chromeUrl('Accuracy Icon')}
+          alt="Accuracy"
+          title="Accuracy"
+          colorKey="compact.acc.icon"
+        />
+      </div>
+      {card.weapons.map((w, wi) => (
+        <div className="compact-weapon" key={wi}>
+          <div className="compact-weapon-left">
+            {editMode && <RemoveBtn className="compact-remove" onClick={() => slots.removeWeapon(wi)} />}
+            <EditableText
+              className="compact-weapon-name"
+              value={w.name}
+              colorKey={`weapon.${wi}.name`}
+              onChange={(v) => update((c) => void (c.weapons[wi]!.name = v))}
+            />
+            {/* icon first so the absolutely-positioned pill paints above it */}
+            <WeaponIcon weapon={w} index={wi} className="compact-weapon-icon" />
+            <WeaponCount value={w.count} onChange={(v) => update((c) => void (c.weapons[wi]!.count = v))} />
+            {/* new-style: weapon trait icons (Suppressed/CQC, static, autoload)
+                overlaid at the bottom-left of the silhouette */}
+            {style === 'new' && [...w.traits, ...(w.newTraits ?? [])].length > 0 && (
+              <div className="compact-weapon-traits">
+                {[...w.traits, ...(w.newTraits ?? [])].map((tr, ti) => (
+                  <ColorableIcon
+                    key={ti}
+                    className="compact-trait-icon"
+                    src={iconUrl(tr.compactIcon ?? tr.icon)}
+                    alt={tr.tooltip}
+                    tint={tr.tint ?? null}
+                    colorKey={`weapon.${wi}.overlaytrait.${ti}.icon`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="compact-ammo-col">
+            {w.ammo.map((a, ai) => (
+              <div className="compact-grid compact-ammo" key={ai}>
+                <div className="compact-ammo-main">
+                  {card.aircraft && a.selfPropelled ? (
+                    /* plane missiles/bombs: no silhouette and no range/count
+                       pills — just the centered guidance icon(s) in the new
+                       style. Guns/rockets keep their silhouette + pills below. */
+                    style === 'new' && a.guidance.length > 0 ? (
+                      <div className="compact-guidance-slot">
+                        {a.guidance.map((g, gi) => (
+                          <ColorableIcon
+                            key={gi}
+                            className="compact-guidance-icon"
+                            src={iconUrl(g.icon)}
+                            alt={g.tooltip}
+                            colorKey={`weapon.${wi}.ammo.${ai}.guidance.${gi}`}
+                          />
+                        ))}
+                      </div>
+                    ) : null
+                  ) : (
+                    <>
+                      <EditableText
+                        className="pill yellow"
+                        value={a.rangePill}
+                        colorKey={`weapon.${wi}.ammo.${ai}.range`}
+                        onChange={(v) => update((c) => void (c.weapons[wi]!.ammo[ai]!.rangePill = v))}
+                      />
+                      <AmmoIcon
+                        ammo={a}
+                        weaponIndex={wi}
+                        ammoIndex={ai}
+                        btnClassName="ammo-icon-btn"
+                      />
+                      <EditableText
+                        className="pill green"
+                        value={a.quantity}
+                        colorKey={`weapon.${wi}.ammo.${ai}.qty`}
+                        onChange={(v) => update((c) => void (c.weapons[wi]!.ammo[ai]!.quantity = v))}
+                      />
+                    </>
+                  )}
+                  {editMode && (
+                    <RemoveBtn
+                      className="compact-ammo-remove"
+                      onClick={() => slots.removeAmmo(wi, ai)}
+                    />
+                  )}
+                </div>
+                <EditableText
+                  className={`compact-stat ${a.compact.isHeat ? 'heat' : ''}`}
+                  value={a.compact.penetration}
+                  colorKey={`weapon.${wi}.ammo.${ai}.pen`}
+                  onChange={(v) =>
+                    update((c) => void (c.weapons[wi]!.ammo[ai]!.compact.penetration = v))
+                  }
+                />
+                <EditableText
+                  className="compact-stat"
+                  value={a.compact.damage}
+                  colorKey={`weapon.${wi}.ammo.${ai}.dmg`}
+                  onChange={(v) =>
+                    update((c) => void (c.weapons[wi]!.ammo[ai]!.compact.damage = v))
+                  }
+                />
+                {(() => {
+                  const accuracyCell = (
+                    <EditableText
+                      className="compact-stat"
+                      value={a.compact.accuracy}
+                      colorKey={`weapon.${wi}.ammo.${ai}.acc`}
+                      onChange={(v) =>
+                        update((c) => void (c.weapons[wi]!.ammo[ai]!.compact.accuracy = v))
+                      }
+                    />
+                  )
+                  if (style !== 'new') return accuracyCell
+                  // new style: target-type icons; guidance is appended here
+                  // except for plane missiles/bombs (whose guidance sits in the
+                  // ammo slot). Fall back to the accuracy value when there is
+                  // nothing to show (e.g. anti-ship Kh-35U has no target icon).
+                  const chips =
+                    card.aircraft && a.selfPropelled ? a.traits : [...a.traits, ...a.guidance]
+                  return chips.length > 0 ? (
+                    <div className="compact-ammo-traits">
+                      {chips.map((tr, ti) => (
+                        <ColorableIcon
+                          key={ti}
+                          className="compact-ammo-trait-icon"
+                          src={iconUrl(tr.icon)}
+                          alt={tr.tooltip}
+                          colorKey={`weapon.${wi}.ammo.${ai}.trait.${ti}.icon`}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    accuracyCell
+                  )
+                })()}
+              </div>
+            ))}
+            {editMode && (
+              <button className="add-weapon-btn ammo edit-chrome" onClick={() => slots.addAmmo(wi)}>
+                {t(lang, 'addAmmo')}
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+      {editMode && (
+        <button className="add-weapon-btn compact edit-chrome" onClick={slots.addWeapon}>
+          {t(lang, 'addWeapon')}
+        </button>
+      )}
+    </div>
+  )
+}
