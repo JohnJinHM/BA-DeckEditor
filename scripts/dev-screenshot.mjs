@@ -73,11 +73,30 @@ await page.locator('.card-panel').screenshot({
   scale: 'css',
 })
 
-// 5. spec chooser
+// 6. nation + spec chooser, showing what the change would cost the deck
 await page.click('.specs-chip')
 await page.waitForSelector('.setup-dialog')
+await page.locator('.setup-dialog .nation-btn', { hasText: 'USA' }).click()
+await page.locator('.spec-random').click()
 await page.waitForTimeout(400)
 await page.screenshot({ path: join(OUT, '6-specs.png') })
+await page.locator('.setup-actions button', { hasText: 'Cancel' }).click()
+
+// 7. the discard guard and the random-battlegroup panel
+await page.getByRole('button', { name: 'New battlegroup' }).click()
+await page.waitForSelector('.confirm-dialog')
+await page.screenshot({ path: join(OUT, '8-discard-guard.png') })
+await page.locator('.confirm-dialog button', { hasText: 'Cancel' }).click()
+
+await page.getByRole('button', { name: 'Random' }).click()
+if ((await page.locator('.confirm-dialog').count()) === 1)
+  await page.locator('.confirm-dialog button', { hasText: 'Discard' }).click()
+await page.waitForSelector('.setup-dialog.narrow')
+await page.waitForTimeout(300)
+await page.screenshot({ path: join(OUT, '9-random-panel.png') })
+await page.locator('.setup-actions button', { hasText: 'Generate' }).click()
+await page.waitForTimeout(1000)
+await page.screenshot({ path: join(OUT, '10-random-deck.png') })
 
 await browser.close()
 

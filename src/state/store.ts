@@ -7,6 +7,8 @@ import { CATEGORIES, CATEGORY_BY_KEY, DEK_VERSION, emptySlot } from '../deck/mod
 import { decodeDek, encodeDek, slotsForSpecs } from '../deck/dek'
 import type { Bytes } from '../deck/dek'
 import { availabilityMap, reconcileSelection } from '../deck/rules'
+import { generateRandomDeck } from '../deck/random'
+import type { RandomDeckOptions } from '../deck/random'
 
 export type Lang = 'eng' | 'chi'
 
@@ -41,7 +43,9 @@ interface AppState {
 
   newDeck(countryId: number, spec1: number, spec2: number, name: string): void
   setDeckName(name: string): void
-  setSpecs(spec1: number, spec2: number): void
+  /** switch the nation and/or the specialization pair of the current deck */
+  setSpecs(countryId: number, spec1: number, spec2: number): void
+  randomizeDeck(options: RandomDeckOptions): void
 
   selectSlot(category: CategoryKey, index: number): void
   addUnit(unitId: number): void
@@ -169,10 +173,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (deck) set({ deck: { ...deck, name } })
   },
 
-  setSpecs(spec1, spec2) {
+  setSpecs(countryId, spec1, spec2) {
     const { db, deck } = get()
     if (!db || !deck) return
-    const next: Deck = { ...deck, spec1, spec2 }
+    const next: Deck = { ...deck, countryId, spec1, spec2 }
     next.slots = slotsForSpecs(db, next)
     // Drop units the new pair cannot field, and clamp counts to the new limits.
     const available = availabilityMap(db, [spec1, spec2])
@@ -195,6 +199,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     const prev = get().selected
     const selected =
       prev && prev.index < next.slots[prev.category].length ? prev : firstSlotRef(next)
+    set({ deck: next, selected, ...renderCards(db, next, selected) })
+  },
+
+  randomizeDeck(options) {
+    const { db, deck } = get()
+    if (!db || !deck) return
+    const next = generateRandomDeck(db, deck, options)
+    const selected = firstSlotRef(next)
     set({ deck: next, selected, ...renderCards(db, next, selected) })
   },
 

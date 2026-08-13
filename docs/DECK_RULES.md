@@ -111,6 +111,24 @@ would open the Ka-52 on 12×Vikhr (+100). The deck itself always stores an
 explicit `optId` for every modification, so this rule only applies when a unit
 is first placed.
 
+## Random battlegroups
+
+[`deck/random.ts`](../src/deck/random.ts) builds a deck from the same rules, in
+four passes:
+
+1. **Cover every category.** Walk each category's pool in random order, giving
+   each slot a distinct unit with a random option for every modification, and
+   skipping any pick that would break the category ceiling or the point target.
+2. **Hand out transports** to ~⅔ of the cards that can take one, 1:1 with the
+   squad, again only where they fit.
+3. **Spend the rest** on extra copies — randomly until the deck is ~90% paid
+   for, then cheapest-increment-first so the total lands just under the target.
+   A card and its 1:1 transports grow together.
+4. **Sort each category cheapest-first**, the way a hand-built deck reads.
+
+The result never exceeds the target (9900 by default) or any category ceiling,
+and in practice lands within ~100 points of the target.
+
 ## Validation
 
 | Condition | Severity | In-game message |
@@ -126,6 +144,10 @@ is first placed.
 
 Errors are the conditions the game calls out as making a battlegroup unusable
 in multiplayer; warnings correspond to its "incomplete battlegroup" notice.
+Nothing here is enforced by blocking the edit — the game lets you save an
+invalid battlegroup too — but `previewSpecChange()` reports the same rules
+ahead of a nation/specialization switch, so the cards a change would cost are
+listed before it is applied.
 The duplicate-unit rule is inferred (neither sample repeats a unit) and is only
 a warning for that reason — the unit pool greys out units already in the
 category, but an imported deck that repeats one is not rejected.

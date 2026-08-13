@@ -181,7 +181,13 @@ const transportBtn = page.locator('.transport-btn').nth(1)
 const before = await totalSpent()
 await transportBtn.click()
 await page.waitForSelector('#transport-card-root')
-const transportTotal = Number(await page.locator('.stepper-cost').nth(1).innerText())
+const transportEach = Number(await page.locator('.stepper-cost .cost-each').nth(1).innerText())
+const transportTotal = Number(await page.locator('.stepper-cost .cost-total').nth(1).innerText())
+check(
+  transportTotal === transportEach * squadCopies,
+  'the stepper shows unit price over card total',
+  `${transportEach} × ${squadCopies} = ${transportTotal}`,
+)
 check(
   (await totalSpent()) === before + transportTotal,
   'adding a transport charges it once per squad copy',
@@ -255,6 +261,81 @@ const again = page.waitForEvent('download')
 await page.getByRole('button', { name: 'Export .dek' }).click()
 const againJson = await decrypt(new Uint8Array(await readFile(await (await again).path())))
 check(builtJson === againJson, 'export → import → export is byte-stable')
+
+// ── phase 3: the discard guard, nation switching, and the random generator ──
+
+console.log('\nguards and generators')
+
+// anything that would throw cards away asks first
+await page.getByRole('button', { name: 'New battlegroup' }).click()
+check((await page.locator('.confirm-dialog').count()) === 1, 'discarding a deck asks for confirmation')
+await page.locator('.confirm-dialog button', { hasText: 'Cancel' }).click()
+check(
+  (await page.locator('.slot-card:not(.empty)').count()) > 0,
+  'cancelling the guard keeps the battlegroup',
+)
+
+// the nation is switchable from Change nation & specializations
+await page.click('.specs-chip')
+await page.waitForSelector('.setup-dialog')
+const wasUS = (await page.locator('.nation-btn.active').innerText()).includes('USA')
+check(
+  (await page.locator('.setup-dialog .nation-btn').count()) === 2,
+  'the change dialog offers both nations',
+)
+await page.locator('.setup-dialog .nation-btn', { hasText: wasUS ? 'Russia' : 'USA' }).click()
+check(
+  (await page.locator('.spec-card.active').count()) === 0,
+  'switching nation clears the specialization picks',
+)
+await page.locator('.spec-random').click()
+check((await page.locator('.spec-card.active').count()) === 2, 'the random pair tile picks two specs')
+check(
+  (await page.locator('.setup-warning').count()) === 1,
+  'the dialog warns that the change costs cards',
+)
+await page.locator('.setup-actions button', { hasText: 'Apply' }).click()
+await page.waitForTimeout(300)
+const flag = await page.locator('.specs-chip > img').getAttribute('src')
+check(
+  flag?.includes(wasUS ? 'rus' : 'usa'),
+  'the deck switched nation',
+  String(flag?.split('/').pop()),
+)
+
+// random battlegroup
+await page.getByRole('button', { name: 'Random' }).click()
+if ((await page.locator('.confirm-dialog').count()) === 1)
+  await page.locator('.confirm-dialog button', { hasText: 'Discard' }).click()
+await page.waitForSelector('.setup-dialog.narrow')
+await page.fill('.setup-dialog.narrow input[type=number]', '9900')
+await page.locator('.setup-actions button', { hasText: 'Generate' }).click()
+await page.waitForTimeout(800)
+
+const rolled = await totalSpent()
+check(rolled <= 9900, `random deck respects the target`, `${rolled} / 9900`)
+check(rolled >= 9000, 'random deck spends most of the target', String(rolled))
+check(
+  (await page.locator('.validity.invalid').count()) === 0,
+  'random deck is within every category ceiling',
+)
+
+// every category the specs grant is covered, and cards read cheapest-first
+const rails = page.locator('.category-row')
+let uncovered = 0
+let misordered = 0
+for (let i = 0; i < (await rails.count()); i++) {
+  await rails.nth(i).click()
+  await page.waitForTimeout(120)
+  const filledCards = page.locator('.slot-card:not(.empty)')
+  if ((await filledCards.count()) === 0) uncovered++
+  const prices = []
+  for (let s = 0; s < (await filledCards.count()); s++)
+    prices.push(Number(await filledCards.nth(s).locator('.cost-each').first().innerText()))
+  if (prices.some((p, n) => n > 0 && p < prices[n - 1])) misordered++
+}
+check(uncovered === 0, 'every category with slots got units')
+check(misordered === 0, 'cards are ordered cheapest-first within each category')
 
 await browser.close()
 for (const p of problems) console.log(p)

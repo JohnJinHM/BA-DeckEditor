@@ -253,8 +253,3 @@ export async function encodeDek(db: GameDb, deck: Deck): Promise<Bytes> {
   }
   return encryptText(serialize(file))
 }
-
-/** The decrypted JSON of a .dek, for inspection/debugging. */
-export async function dekToJson(bytes: Bytes): Promise<string> {
-  return decryptBytes(bytes)
-}

@@ -204,6 +204,81 @@ export function deckTotals(db: GameDb, deck: Deck): DeckTotals {
   return { categories, spent, budget, overTotal: spent > budget }
 }
 
+// ── destructive-change preview ──────────────────────────────────────────────
+
+export interface SpecChangeImpact {
+  /** units the new pair cannot field at all */
+  removed: { category: CategoryKey; name: string }[]
+  /** cards whose copy count is above the new availability */
+  clamped: { category: CategoryKey; name: string; from: number; to: number }[]
+  /** transports the new pair does not offer for their squad */
+  transportsDropped: { category: CategoryKey; name: string }[]
+  /** slots lost because the new pair grants fewer of them */
+  slotsLost: { category: CategoryKey; count: number }[]
+  /** true when nothing in the deck changes */
+  clean: boolean
+}
+
+/** What switching to another nation/specialization pair would do to the deck.
+ *  Shown before the change is applied — it cannot be undone. */
+export function previewSpecChange(
+  db: GameDb,
+  deck: Deck,
+  spec1: number,
+  spec2: number,
+): SpecChangeImpact {
+  const specs = [spec1, spec2]
+    .map((id) => db.specializations.get(id))
+    .filter((s): s is SpecializationRow => !!s)
+  const available = availabilityMap(db, [spec1, spec2])
+  const impact: SpecChangeImpact = {
+    removed: [],
+    clamped: [],
+    transportsDropped: [],
+    slotsLost: [],
+    clean: true,
+  }
+
+  for (const def of CATEGORIES) {
+    const slots = deck.slots[def.key] ?? []
+    const keep = categorySlots(specs, def)
+    const filledPastLimit = slots.slice(keep).filter((s) => s.unitId != null).length
+    if (filledPastLimit > 0) impact.slotsLost.push({ category: def.key, count: filledPastLimit })
+
+    for (const slot of slots.slice(0, keep)) {
+      if (slot.unitId == null) continue
+      const name = db.units.get(slot.unitId)?.HUDName ?? String(slot.unitId)
+      const a = available.get(slot.unitId)
+      if (!a) {
+        impact.removed.push({ category: def.key, name })
+        continue
+      }
+      if (slot.count > a.max)
+        impact.clamped.push({ category: def.key, name, from: slot.count, to: a.max })
+      if (slot.transportId != null && !a.transports.includes(slot.transportId))
+        impact.transportsDropped.push({
+          category: def.key,
+          name: db.units.get(slot.transportId)?.HUDName ?? String(slot.transportId),
+        })
+    }
+  }
+
+  impact.clean =
+    impact.removed.length === 0 &&
+    impact.clamped.length === 0 &&
+    impact.transportsDropped.length === 0 &&
+    impact.slotsLost.length === 0
+  return impact
+}
+
+/** Cards currently in the deck — the "is there anything to lose?" test. */
+export function filledSlotCount(deck: Deck): number {
+  return CATEGORIES.reduce(
+    (n, def) => n + (deck.slots[def.key] ?? []).filter((s) => s.unitId != null).length,
+    0,
+  )
+}
+
 export interface DeckIssue {
   severity: 'error' | 'warning'
   category?: CategoryKey

@@ -3,6 +3,7 @@ import { useAppStore, useSelectedSlot } from '../state/store'
 import { chromeUrl, thumbnailUrl } from '../assets'
 import { availabilityMap, defaultSelection, unitPrice } from '../deck/rules'
 import { resolveUnitLabel } from '../deck/label'
+import { CostStack } from './CostStack'
 import { t } from './i18n'
 
 /** Quantity stepper + transport picker for the selected slot — the two knobs
@@ -107,7 +108,9 @@ function Stepper({ label, value, min, max, unitCost, onChange }: {
         </button>
       </div>
       <span className="stepper-max">/ {max}</span>
-      <span className="stepper-cost">{unitCost * value}</span>
+      <span className="stepper-cost">
+        <CostStack each={unitCost} count={value} />
+      </span>
     </div>
   )
 }

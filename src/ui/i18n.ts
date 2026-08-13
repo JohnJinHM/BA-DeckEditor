@@ -5,40 +5,75 @@ import type { Lang } from '../state/store'
 // through db.loc/locOr instead, so it always matches the game's wording.
 const STRINGS = {
   // App chrome
-  title: { eng: 'BA DeckEditor', chi: 'BA 编组编辑器' },
+  title: { eng: 'BA DeckEditor', chi: 'BA 卡组编辑器' },
   loading: { eng: 'Loading unit database…', chi: '正在加载单位数据库…' },
   loadFailed: { eng: 'Failed to load data', chi: '数据加载失败' },
-  viewSource: { eng: 'View source on GitHub', chi: '在 GitHub 查看源代码' },
   langToggle: {
     eng: 'UI language (unit cards always use in-game English)',
     chi: '界面语言（单位卡片始终使用游戏内英文）',
   },
 
   // Deck setup
-  newDeck: { eng: 'New battlegroup', chi: '新建编组' },
+  newDeck: { eng: 'New battlegroup', chi: '新建卡组' },
   chooseNation: { eng: 'Choose a nation', chi: '选择国家' },
   chooseSpecs: { eng: 'Choose 2 specializations', chi: '选择 2 个专精' },
   deckName: { eng: 'Name', chi: '名称' },
   create: { eng: 'Create', chi: '创建' },
   cancel: { eng: 'Cancel', chi: '取消' },
-  changeSpecs: { eng: 'Change specializations', chi: '更改专精' },
+  changeSpecs: { eng: 'Change nation & specializations', chi: '更改国家与专精' },
   apply: { eng: 'Apply', chi: '应用' },
-  specChangeWarning: {
-    eng: 'Changing specializations re-checks every slot: units the new pair cannot field, and slots past the new limit, are removed.',
-    chi: '更改专精会重新校验每个槽位：新组合无法编入的单位以及超出新槽位上限的内容将被移除。',
+  randomSpecs: { eng: 'Random pair', chi: '随机组合' },
+  randomSpecsHint: {
+    eng: 'Pick two specializations of this nation at random',
+    chi: '在该国的专精中随机选择两个',
   },
+  specImpactNone: {
+    eng: 'Every card in the battlegroup survives this change.',
+    chi: '卡组中的所有单位都不受此更改影响。',
+  },
+  specImpactTitle: {
+    eng: 'Applying this will change the battlegroup:',
+    chi: '应用此更改会改动卡组：',
+  },
+  impactRemoved: { eng: 'Removed — the new pair cannot field', chi: '移除——新组合无法编入' },
+  impactClamped: { eng: 'Reduced to the new availability', chi: '按新的可用上限缩减' },
+  impactTransports: { eng: 'Transports removed', chi: '移除运输载具' },
+  impactSlots: { eng: 'Cards dropped for want of slots', chi: '因槽位不足而丢弃的单位' },
+  andMore: { eng: 'and {n} more', chi: '等 {n} 项' },
 
   // Toolbar
   importDek: { eng: 'Import .dek…', chi: '导入 .dek…' },
   exportDek: { eng: 'Export .dek', chi: '导出 .dek' },
-  exportJson: { eng: 'Export JSON', chi: '导出 JSON' },
   importFailed: { eng: 'Import failed', chi: '导入失败' },
   points: { eng: 'Points', chi: '点数' },
   slots: { eng: 'Slots', chi: '槽位' },
+  github: { eng: 'View the source on GitHub', chi: '在 GitHub 查看源代码' },
+
+  // Random battlegroup
+  randomDeck: { eng: 'Random', chi: '随机卡组' },
+  randomDeckHint: {
+    eng: 'Fills every category with random units and variants, spending up to the target. Cards are ordered cheapest first.',
+    chi: '用随机单位与变体填满每个类别，直到接近目标点数。卡片按价格从低到高排列。',
+  },
+  targetPoints: { eng: 'Target points', chi: '目标点数' },
+  randomizeSpecsToo: {
+    eng: 'Roll a new nation and specialization pair too',
+    chi: '同时随机选择国家与专精组合',
+  },
+  generate: { eng: 'Generate', chi: '生成' },
+
+  // Discard guard
+  discardTitle: { eng: 'Discard the current battlegroup?', chi: '放弃当前卡组？' },
+  discardBody: {
+    eng: 'This replaces the {n} card(s) you have placed. Export the battlegroup first if you want to keep it.',
+    chi: '这会替换你已放置的 {n} 张卡片。如需保留，请先导出该卡组。',
+  },
+  discardConfirm: { eng: 'Discard and continue', chi: '放弃并继续' },
+  continueAnyway: { eng: 'Continue', chi: '继续' },
 
   // Slots & pool
   emptySlot: { eng: 'Empty slot', chi: '空槽位' },
-  removeUnit: { eng: 'Remove from battlegroup', chi: '从编组中移除' },
+  removeUnit: { eng: 'Remove from battlegroup', chi: '从卡组中移除' },
   searchUnits: { eng: 'Search units…', chi: '搜索单位…' },
   noUnits: { eng: 'No units available in this category.', chi: '该类别没有可用单位。' },
   noSlots: {
@@ -68,7 +103,7 @@ const STRINGS = {
   },
 
   // Validation
-  deckValid: { eng: 'This battlegroup is valid.', chi: '该编组有效。' },
+  deckValid: { eng: 'This battlegroup is valid.', chi: '该卡组有效。' },
 
   // Icon picker dialog (reached only through the ported card renderer)
   close: { eng: 'Close', chi: '关闭' },

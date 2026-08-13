@@ -9,7 +9,6 @@ Unit cards are rendered by the card engine from
 from **[BA-Units](https://github.com/JohnJinHM/BA-Units)**.
 
 Built with **React + TypeScript + Vite**, deployed to GitHub Pages.
-Everything runs client-side — no deck ever leaves your browser.
 
 > 🇨🇳 [中文](README_CN.md)
 
@@ -34,8 +33,13 @@ Everything runs client-side — no deck ever leaves your browser.
 - **Variant-aware artwork** — options that rename a unit, swap its `Units` row
   (Scout Snipers → the M107 variant) or override its label art update the slot
   and card to match.
-- **`.dek` import/export**, byte-compatible with the game (also exports the
-  decrypted JSON for inspection).
+- **Random battlegroup** — rolls units, variants and transports across every
+  category up to a point target (9900 by default), cheapest card first, and can
+  roll the nation and specialization pair with it.
+- **`.dek` import/export**, byte-compatible with the game.
+- **Guarded changes** — anything that would throw cards away asks first, and
+  the nation/specialization dialog lists exactly which cards the change costs
+  before you apply it.
 
 ## Contents
 
@@ -48,10 +52,11 @@ src/
   deck/        model.ts   categories, slots, the Deck type
                rules.ts   slots, budgets, availability, pricing, validation
                label.ts   variant-aware unit name + label art
+               random.ts  random battlegroup generator
                dek.ts     .dek codec (AES-256-CBC via WebCrypto)
   state/       zustand store (deck, selection, rendered card)
-  ui/          setup dialog, category rail, slot strip, unit pool,
-               card panel, customization options, toolbar
+  ui/          setup + random + confirm dialogs, category rail, slot strip,
+               unit pool, card panel, customization options, toolbar
 public/
   data/        game database dump (24 tables + localization, from BA-Units)
   assets/      extracted game assets — produced by scripts/extract-assets.mjs
@@ -143,6 +148,7 @@ developers rotated the encryption key — recover it with
 - [x] Variant-aware names and label art
 - [x] `.dek` import/export verified against real game files
 - [x] Deck validation (points, availability, transports, completeness)
+- [x] Random battlegroup generator and random specialization pair
+- [x] Discard guards and a preview of what a spec change costs
 - [ ] Unit skins (`unitSkinId`/`tranSkinId` are preserved but not editable —
       the game ships no skin table in `DataBaseCompiled.asset`)
-- [ ] Deck sharing via URL / deck image export

@@ -139,15 +139,18 @@ button { font-family: inherit; }
   cursor: pointer;
 }
 
-.source-link {
-  position: fixed;
-  bottom: 6px;
-  right: 10px;
-  font-size: 11px;
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 26px;
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: 3px;
   color: var(--muted);
-  text-decoration: none;
 }
-.source-link:hover { color: var(--gold); }
+.github-link:hover { border-color: var(--gold); color: var(--gold); }
 
 /* ── category rail ────────────────────────────────────────────────────── */
 
@@ -247,12 +250,12 @@ button { font-family: inherit; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.slot-meta { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
-.slot-count { color: var(--muted); }
+.slot-meta { display: flex; align-items: flex-start; justify-content: space-between; }
+.slot-count { color: var(--muted); font-variant-numeric: tabular-nums; }
 .slot-count.invalid { color: var(--red); }
-.slot-cost { color: var(--gold); font-weight: 600; }
 .slot-transport {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 4px;
   font-size: 10px;
@@ -260,9 +263,21 @@ button { font-family: inherit; }
   border-top: 1px solid var(--line);
   padding-top: 3px;
   overflow: hidden;
-  white-space: nowrap;
 }
-.slot-transport em { font-style: normal; color: var(--gold); }
+.slot-transport-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot-transport .cost-each { font-size: 11px; }
+.slot-transport .cost-total { font-size: 9px; }
+
+/* price of one copy over the card total, wherever a count multiplies a price */
+.cost-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.cost-each { color: var(--gold); font-weight: 600; }
+.cost-total { color: var(--muted); font-size: 0.85em; }
 .slot-remove {
   position: absolute;
   top: 2px;
@@ -383,7 +398,8 @@ button { font-family: inherit; }
   font-variant-numeric: tabular-nums;
 }
 .stepper-max { color: var(--muted); font-variant-numeric: tabular-nums; }
-.stepper-cost { margin-left: auto; color: var(--gold); font-weight: 600; font-variant-numeric: tabular-nums; }
+.stepper-cost { margin-left: auto; }
+.stepper-cost .cost-each { font-size: 14px; }
 
 .transport-row { display: flex; gap: 8px; }
 .transport-choices { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
@@ -494,6 +510,9 @@ button { font-family: inherit; }
   overflow: hidden;
 }
 .spec-card:hover { border-color: var(--line-hi); }
+/* the "roll two for me" tile */
+.spec-random .spec-art { object-fit: contain; padding: 10px 0; opacity: 0.8; }
+.spec-random:hover .spec-art { opacity: 1; }
 .spec-card.active { border-color: var(--gold); }
 .spec-art { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; opacity: 0.65; }
 .spec-card.active .spec-art { opacity: 1; }
@@ -520,7 +539,22 @@ button { font-family: inherit; }
 .budget-preview td:not(:first-child) { text-align: right; }
 .budget-total td { border-top: 1px solid var(--line); font-weight: 700; color: var(--gold); }
 
-.setup-warning { color: var(--muted); line-height: 1.5; }
+/* what a nation/specialization change would cost the current deck */
+.setup-warning {
+  padding: 8px 12px;
+  background: #2a2314;
+  border: 1px solid #6b5626;
+  border-radius: 3px;
+  line-height: 1.6;
+}
+.setup-warning strong { color: var(--gold); }
+.setup-warning ul { margin: 4px 0 0; padding-left: 18px; }
+.setup-warning em { font-style: normal; color: var(--text); }
+.setup-note { color: var(--muted); line-height: 1.5; }
+.setup-note.ok { color: var(--green); }
+.setup-suffix { color: var(--muted); font-style: normal; }
+.setup-check { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.setup-dialog.narrow { width: 460px; }
 .setup-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .setup-actions button {
   background: var(--sunk);
@@ -531,6 +565,22 @@ button { font-family: inherit; }
   cursor: pointer;
 }
 .setup-actions button.primary { background: var(--gold); border-color: var(--gold); color: #14181c; font-weight: 700; }
+.setup-actions button.danger { background: #7a2c22; border-color: #a34435; color: #ffe7e3; font-weight: 700; }
+.setup-actions button.danger:hover { background: #93362a; }
+
+.confirm-dialog {
+  width: 460px;
+  max-width: 92vw;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.confirm-dialog h2 { font-size: 15px; color: var(--gold); }
+.confirm-body { line-height: 1.6; color: var(--text); }
 .setup-actions button:disabled { opacity: 0.4; cursor: default; }
 
 /* ── icon picker dialog (used by the ported card renderer) ────────────── */

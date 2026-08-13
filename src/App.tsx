@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react'
 import { useAppStore } from './state/store'
 import { DeckToolbar } from './ui/DeckToolbar'
 import { DeckSetup } from './ui/DeckSetup'
+import { RandomDeckDialog } from './ui/RandomDeckDialog'
+import { ConfirmDialog } from './ui/ConfirmDialog'
 import { CategoryRail } from './ui/CategoryRail'
 import { SlotStrip } from './ui/SlotStrip'
 import { UnitPool } from './ui/UnitPool'
 import { CardPanel } from './ui/CardPanel'
+import { filledSlotCount } from './deck/rules'
 import { t } from './ui/i18n'
 import './app.css'
 
@@ -16,7 +19,9 @@ export default function App() {
   const error = useAppStore((s) => s.error)
   const deck = useAppStore((s) => s.deck)
   const init = useAppStore((s) => s.init)
-  const [setup, setSetup] = useState<'new' | 'specs' | null>(null)
+  const [dialog, setDialog] = useState<'new' | 'specs' | 'random' | null>(null)
+  /** action held back until the user confirms losing the current deck */
+  const [pending, setPending] = useState<(() => void) | null>(null)
 
   useEffect(() => {
     void init()
@@ -24,7 +29,7 @@ export default function App() {
 
   // A fresh visit has no deck; open the create dialog once the data is in.
   useEffect(() => {
-    if (db && !deck) setSetup((s) => s ?? 'new')
+    if (db && !deck) setDialog((d) => d ?? 'new')
   }, [db, deck])
 
   if (loading) return <div className="splash">{t(lang, 'loading')}</div>
@@ -35,9 +40,18 @@ export default function App() {
       </div>
     )
 
+  const filled = deck ? filledSlotCount(deck) : 0
+  /** Run `action`, but confirm first if it would discard cards. */
+  const guardDiscard = (action: () => void) => (filled > 0 ? setPending(() => action) : action())
+
   return (
     <div className="app">
-      <DeckToolbar onNewDeck={() => setSetup('new')} onChangeSpecs={() => setSetup('specs')} />
+      <DeckToolbar
+        onNewDeck={() => setDialog('new')}
+        onChangeSpecs={() => setDialog('specs')}
+        onRandomDeck={() => setDialog('random')}
+        guardDiscard={guardDiscard}
+      />
       {deck ? (
         <main className="workspace">
           <CategoryRail />
@@ -50,16 +64,24 @@ export default function App() {
       ) : (
         <main className="workspace empty" />
       )}
-      {setup && <DeckSetup mode={setup} onClose={() => setSetup(null)} />}
-      <a
-        className="source-link"
-        href="https://github.com/JohnJinHM/BA-DeckEditor"
-        target="_blank"
-        rel="noreferrer"
-        title={t(lang, 'viewSource')}
-      >
-        GitHub
-      </a>
+
+      {(dialog === 'new' || dialog === 'specs') && (
+        <DeckSetup mode={dialog} onClose={() => setDialog(null)} />
+      )}
+      {dialog === 'random' && <RandomDeckDialog onClose={() => setDialog(null)} />}
+      {pending && (
+        <ConfirmDialog
+          title={t(lang, 'discardTitle')}
+          body={t(lang, 'discardBody').replace('{n}', String(filled))}
+          confirmLabel={t(lang, 'discardConfirm')}
+          onConfirm={() => {
+            const run = pending
+            setPending(null)
+            run()
+          }}
+          onCancel={() => setPending(null)}
+        />
+      )}
     </div>
   )
 }

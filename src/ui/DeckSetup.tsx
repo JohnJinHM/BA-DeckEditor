@@ -2,20 +2,24 @@ import { useMemo, useState } from 'react'
 import { useAppStore } from '../state/store'
 import { flagUrl, specIconUrl, specIllustrationUrl } from '../assets'
 import { CATEGORIES } from '../deck/model'
-import { categoryBudget, categorySlots } from '../deck/rules'
+import { categoryBudget, categorySlots, previewSpecChange } from '../deck/rules'
+import type { SpecChangeImpact } from '../deck/rules'
+import { randomSpecs } from '../deck/random'
 import type { SpecializationRow } from '../data/types'
 import { t } from './i18n'
 
 interface Props {
-  /** editing an existing deck's pair, rather than creating a new deck */
+  /** editing an existing deck's nation/pair, rather than creating a new deck */
   mode: 'new' | 'specs'
   onClose(): void
 }
 
 /**
- * Nation + two-specialization chooser. The pair decides everything downstream:
- * the per-category slot counts and point budgets, and which units the deck can
- * field at all — so it previews the resulting budget table live.
+ * Nation + two-specialization chooser, used both to create a battlegroup and
+ * to re-base an existing one. The pair decides everything downstream — the
+ * per-category slot counts and point budgets, and which units the deck can
+ * field at all — so it previews the resulting budget table, and when editing,
+ * exactly which cards the change would cost.
  */
 export function DeckSetup({ mode, onClose }: Props) {
   const db = useAppStore((s) => s.db)!
@@ -29,13 +33,25 @@ export function DeckSetup({ mode, onClose }: Props) {
   const [picked, setPicked] = useState<number[]>(
     mode === 'specs' && deck ? [deck.spec1, deck.spec2] : [],
   )
-  const [name, setName] = useState(deck?.name ?? db.locOr('ui_arsenal_newdeck_default_name', 'New battlegroup'))
+  const [name, setName] = useState(
+    deck?.name ?? db.locOr('ui_arsenal_newdeck_default_name', 'New battlegroup'),
+  )
 
   const specs = useMemo(() => db.countrySpecializations(countryId), [db, countryId])
   const chosen = picked
     .map((id) => db.specializations.get(id))
     .filter((s): s is SpecializationRow => !!s)
   const ready = chosen.length === 2
+
+  // Editing an existing deck: what does this pair cost the cards already in it?
+  const impact: SpecChangeImpact | null =
+    mode === 'specs' && deck && ready ? previewSpecChange(db, deck, picked[0], picked[1]) : null
+
+  function selectCountry(id: number) {
+    if (id === countryId) return
+    setCountryId(id)
+    setPicked([]) // specializations belong to one nation
+  }
 
   function toggle(id: number) {
     setPicked((prev) => {
@@ -48,7 +64,7 @@ export function DeckSetup({ mode, onClose }: Props) {
   function confirm() {
     if (!ready) return
     if (mode === 'new') newDeck(countryId, picked[0], picked[1], name.trim() || 'Battlegroup')
-    else setSpecs(picked[0], picked[1])
+    else setSpecs(countryId, picked[0], picked[1])
     onClose()
   }
 
@@ -63,33 +79,36 @@ export function DeckSetup({ mode, onClose }: Props) {
         </div>
 
         {mode === 'new' && (
-          <>
-            <label className="setup-field">
-              <span>{t(lang, 'deckName')}</span>
-              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={64} />
-            </label>
-
-            <h3>{db.locOr('ui_arsenal_newdeck_nation_choose', t(lang, 'chooseNation'))}</h3>
-            <div className="nation-row">
-              {countries.map((c) => (
-                <button
-                  key={c.Id}
-                  className={`nation-btn ${c.Id === countryId ? 'active' : ''}`}
-                  onClick={() => {
-                    setCountryId(c.Id)
-                    setPicked([])
-                  }}
-                >
-                  <img src={flagUrl(c.FlagFileName) ?? undefined} alt="" />
-                  <span>{db.loc(c.UIName) || c.Name}</span>
-                </button>
-              ))}
-            </div>
-          </>
+          <label className="setup-field">
+            <span>{t(lang, 'deckName')}</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={64} />
+          </label>
         )}
+
+        <h3>{db.locOr('ui_arsenal_newdeck_nation_choose', t(lang, 'chooseNation'))}</h3>
+        <div className="nation-row">
+          {countries.map((c) => (
+            <button
+              key={c.Id}
+              className={`nation-btn ${c.Id === countryId ? 'active' : ''}`}
+              onClick={() => selectCountry(c.Id)}
+            >
+              <img src={flagUrl(c.FlagFileName) ?? undefined} alt="" />
+              <span>{db.loc(c.UIName) || c.Name}</span>
+            </button>
+          ))}
+        </div>
 
         <h3>{db.locOr('ui_arsenal_newdeck_specs_choose', t(lang, 'chooseSpecs'))}</h3>
         <div className="spec-grid">
+          <button
+            className="spec-card spec-random"
+            title={t(lang, 'randomSpecsHint')}
+            onClick={() => setPicked(randomSpecs(db, countryId) ?? [])}
+          >
+            <img className="spec-art" src={flagUrl('random flag') ?? undefined} alt="" />
+            <span className="spec-name">{t(lang, 'randomSpecs')}</span>
+          </button>
           {specs.map((s) => {
             const on = picked.includes(s.Id)
             return (
@@ -134,15 +153,62 @@ export function DeckSetup({ mode, onClose }: Props) {
           </table>
         )}
 
-        {mode === 'specs' && <p className="setup-warning">{t(lang, 'specChangeWarning')}</p>}
+        {impact && <ImpactNotice impact={impact} />}
 
         <div className="setup-actions">
           <button onClick={onClose}>{t(lang, 'cancel')}</button>
-          <button className="primary" disabled={!ready} onClick={confirm}>
+          <button
+            className={impact && !impact.clean ? 'danger' : 'primary'}
+            disabled={!ready}
+            onClick={confirm}
+          >
             {mode === 'new' ? t(lang, 'create') : t(lang, 'apply')}
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** Exactly which cards a nation/specialization change would cost. */
+function ImpactNotice({ impact }: { impact: SpecChangeImpact }) {
+  const lang = useAppStore((s) => s.lang)
+  if (impact.clean) return <p className="setup-note ok">{t(lang, 'specImpactNone')}</p>
+
+  // long lists (a nation switch invalidates every card) get truncated
+  const names = (xs: { name: string }[]) => {
+    const all = [...new Set(xs.map((x) => x.name))]
+    return all.length > 10
+      ? `${all.slice(0, 10).join(', ')} ${t(lang, 'andMore').replace('{n}', String(all.length - 10))}`
+      : all.join(', ')
+  }
+  return (
+    <div className="setup-warning">
+      <strong>{t(lang, 'specImpactTitle')}</strong>
+      <ul>
+        {impact.removed.length > 0 && (
+          <li>
+            {t(lang, 'impactRemoved')}: <em>{names(impact.removed)}</em>
+          </li>
+        )}
+        {impact.clamped.length > 0 && (
+          <li>
+            {t(lang, 'impactClamped')}:{' '}
+            <em>{impact.clamped.map((c) => `${c.name} ×${c.from}→×${c.to}`).join(', ')}</em>
+          </li>
+        )}
+        {impact.transportsDropped.length > 0 && (
+          <li>
+            {t(lang, 'impactTransports')}: <em>{names(impact.transportsDropped)}</em>
+          </li>
+        )}
+        {impact.slotsLost.length > 0 && (
+          <li>
+            {t(lang, 'impactSlots')}:{' '}
+            <em>{impact.slotsLost.reduce((n, s) => n + s.count, 0)}</em>
+          </li>
+        )}
+      </ul>
     </div>
   )
 }

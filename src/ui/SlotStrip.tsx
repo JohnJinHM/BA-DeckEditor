@@ -3,9 +3,10 @@ import { useAppStore } from '../state/store'
 import { thumbnailUrl } from '../assets'
 import { CATEGORY_BY_KEY } from '../deck/model'
 import type { DeckSlot } from '../deck/model'
-import { availabilityMap, slotCost, unitPrice } from '../deck/rules'
+import { availabilityMap, unitPrice } from '../deck/rules'
 import { resolveUnitLabel } from '../deck/label'
 import type { GameDb } from '../data/db'
+import { CostStack } from './CostStack'
 import { t } from './i18n'
 
 /** The active category's slots, in .dek slot order. */
@@ -69,12 +70,17 @@ function FilledSlot({ db, slot, max }: { db: GameDb; slot: DeckSlot; max: number
       <span className="slot-name">{unit?.name ?? '—'}</span>
       <span className="slot-meta">
         <span className={`slot-count ${slot.count > max ? 'invalid' : ''}`}>×{slot.count}</span>
-        <span className="slot-cost">{slotCost(db, slot)}</span>
+        <CostStack each={unitPrice(db, slot.unitId!, slot.options)} count={slot.count} />
       </span>
       {transport && (
         <span className="slot-transport" title={transport.name}>
-          {transport.name} ×{slot.transportCount}
-          <em>{unitPrice(db, transport.unit.Id, slot.transportOptions) * slot.transportCount}</em>
+          <span className="slot-transport-name">
+            {transport.name} ×{slot.transportCount}
+          </span>
+          <CostStack
+            each={unitPrice(db, transport.unit.Id, slot.transportOptions)}
+            count={slot.transportCount}
+          />
         </span>
       )}
     </>

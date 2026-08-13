@@ -28,7 +28,9 @@
 
 .custom-row {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1.5fr) 46px;
+  /* the slot name sizes to its content and never wraps ("Weapon package",
+     "Self-defence weapon"); the option column absorbs what is left */
+  grid-template-columns: 30px auto minmax(0, 1fr) 46px;
   align-items: center;
   gap: 6px;
   width: 100%;
@@ -52,8 +54,7 @@
   font-size: 15px;
   font-weight: 700;
   color: #fff;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .custom-option { text-align: right; line-height: 1.2; }
 .custom-cost {
