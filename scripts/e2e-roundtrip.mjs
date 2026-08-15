@@ -60,6 +60,15 @@ await page.click('.setup-actions button:not(.primary)')
 
 let failures = 0
 
+/** Open a category in the rail. Loading or rolling a deck lands on the
+ *  all-categories overview, so the slot strip only exists once one is open. */
+async function openCategory(name) {
+  const row = page.locator('.category-row', { hasText: name })
+  // clicking the open category closes it again
+  if (!((await row.getAttribute('class')) ?? '').includes('active')) await row.click()
+  await page.waitForSelector('.slot-strip')
+}
+
 // /samples holds real battlegroups exported from the game and is not part of a
 // clean checkout; the build-a-deck phase below runs either way.
 async function sampleDecks() {
@@ -83,7 +92,8 @@ for (const name of samples) {
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(raw),
   })
-  await page.waitForSelector('.slot-card:not(.empty)')
+  await page.waitForSelector('.pool-overview')
+  await page.waitForTimeout(200)
 
   // Export .dek, decrypt, and compare with the file we fed in.
   const dl = page.waitForEvent('download')
@@ -118,8 +128,13 @@ await page.locator('.spec-card', { hasText: 'Armored Brigade' }).click()
 await page.locator('.spec-card', { hasText: 'USMC' }).click()
 await page.click('.setup-actions button.primary')
 
-await page.waitForSelector('.slot-strip')
+await page.waitForSelector('.pool-overview')
 check((await totalSpent()) === 0, 'a new deck starts at 0 points')
+check(
+  (await page.locator('.slot-strip').count()) === 0,
+  'a new deck opens on the all-categories overview, with no category selected',
+)
+await openCategory('Reconnaissance')
 check((await page.locator('.slot-card').count()) === 7, 'recon has 7 slots (4 + 3)')
 
 // one click on a pool unit = one copy
@@ -267,7 +282,8 @@ await page.setInputFiles('input[type=file]', {
   mimeType: 'application/octet-stream',
   buffer: Buffer.from(await readFile(builtPath)),
 })
-await page.waitForSelector('.slot-card:not(.empty)')
+await page.waitForSelector('.pool-overview')
+await openCategory('Reconnaissance')
 check((await totalSpent()) === spent, 're-importing the exported deck restores the same total', String(spent))
 
 const again = page.waitForEvent('download')
@@ -321,7 +337,13 @@ await page.getByRole('button', { name: 'Random' }).click()
 if ((await page.locator('.confirm-dialog').count()) === 1)
   await page.locator('.confirm-dialog button', { hasText: 'Discard' }).click()
 await page.waitForSelector('.setup-dialog.narrow')
-await page.fill('.setup-dialog.narrow input[type=number]', '9900')
+const target = page.locator('.setup-dialog.narrow input[type=number]')
+check(
+  (await target.inputValue()) === (await target.getAttribute('max')),
+  'the random dialog opens on the nation’s full point budget',
+  await target.inputValue(),
+)
+await target.fill('9900')
 await page.locator('.setup-actions button', { hasText: 'Generate' }).click()
 await page.waitForTimeout(800)
 

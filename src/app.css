@@ -221,8 +221,11 @@ button { font-family: inherit; }
 }
 .slot-card {
   position: relative;
-  /* grow to share a wide row, never shrink below a legible card */
+  /* grow to share a wide row, never shrink below a legible card — and stop
+     growing once the label art is comfortably readable, so a category with two
+     slots does not blow its thumbnails up to half the row each */
   flex: 1 0 118px;
+  max-width: 160px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -343,6 +346,70 @@ button { font-family: inherit; }
 .pool-meta { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
 .pool-cost { color: var(--gold); font-weight: 600; }
 .pool-avail { color: var(--muted); }
+
+/* ── all-categories overview (no category open) ───────────────────────────
+   Label art alone, every category at once — names and prices stay in the
+   tooltip so the whole roster fits on one screen. */
+
+.pool-overview {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.overview-group { display: flex; flex-direction: column; gap: 4px; }
+.overview-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 0 3px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+.overview-head:hover { color: var(--gold); border-bottom-color: var(--gold); }
+.overview-head em { font-style: normal; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 4px;
+}
+.overview-cell {
+  position: relative;
+  display: block;
+  padding: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  cursor: pointer;
+  overflow: hidden;
+}
+.overview-cell:hover { border-color: var(--line-hi); }
+.overview-cell.in-deck { border-color: #4c5f45; }
+.overview-cell.blocked { opacity: 0.4; cursor: default; }
+.overview-cell.blocked:hover { border-color: var(--line); }
+.overview-thumb { display: block; width: 100%; aspect-ratio: 416 / 216; object-fit: cover; }
+.overview-count {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  padding: 0 3px;
+  background: rgba(0, 0, 0, 0.75);
+  border-radius: 2px;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ── card panel ───────────────────────────────────────────────────────── */
 
@@ -752,6 +819,7 @@ button { font-family: inherit; }
   .total-value { font-size: 16px; }
   .validity { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pool-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+  .overview-grid { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); }
   .slot-card { flex-basis: 108px; }
   .setup-dialog,
   .confirm-dialog { padding: 12px; }

@@ -16,6 +16,10 @@ import type {
 } from './types'
 import { unitSearchNames } from './resolve'
 
+// Weapon silhouettes used as Options.OptionPicture that no Weapons row names,
+// so scanning Weapons.HUDIcon alone misses them (see isWeaponArt).
+const EXTRA_WEAPON_ART = ['inf_kornet_m', 'gsh23_pylon']
+
 const TABLE_NAMES = [
   'Units',
   'Countries',
@@ -130,6 +134,7 @@ export class GameDb {
   private locLower: Map<string, string>
   private engLower: Map<string, string>
   private searchText?: Map<number, string>
+  private weaponArt?: Set<string>
 
   /** UI-language translation (case-insensitive); falls back to the key. */
   loc(key: string | null | undefined): string {
@@ -183,6 +188,20 @@ export class GameDb {
   /** Playable countries (the hidden "Editor" pseudo-country is excluded). */
   playableCountries(): CountryRow[] {
     return this.tables.Countries.filter((c) => !c.Hidden)
+  }
+
+  /** True when an Options.OptionPicture name is a weapon silhouette rather
+   *  than a Modifications sprite. Both kinds land in one asset folder, but
+   *  only the silhouettes are drawn facing right and want the card's
+   *  horizontal flip. Built lazily and cached on first use. */
+  isWeaponArt(name: string | null | undefined): boolean {
+    if (!name) return false
+    if (!this.weaponArt) {
+      this.weaponArt = new Set(EXTRA_WEAPON_ART)
+      for (const w of this.tables.Weapons)
+        if (w.HUDIcon) this.weaponArt.add(w.HUDIcon.toLowerCase())
+    }
+    return this.weaponArt.has(name.toLowerCase())
   }
 
   /** Lowercased searchable text per armory unit — its name plus every variant

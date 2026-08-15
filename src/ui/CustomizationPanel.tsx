@@ -97,7 +97,14 @@ function ModRow({ mod, options, currentId, expanded, onToggle, onPick }: RowProp
               className={`custom-choice ${o.Id === current?.Id ? 'active' : ''}`}
               onClick={() => onPick(o.Id)}
             >
-              <img className="custom-choice-art" src={optionPictureUrl(o.OptionPicture) ?? undefined} alt="" />
+              <img
+                // weapon silhouettes face right in the assets; mirror them the
+                // way the card's weapon list does. Modification sprites (armor,
+                // optics, engines) are drawn as they should read.
+                className={`custom-choice-art ${db.isWeaponArt(o.OptionPicture) ? 'mirror' : ''}`}
+                src={optionPictureUrl(o.OptionPicture) ?? undefined}
+                alt=""
+              />
               <span className="custom-choice-name">{db.locOr(o.UIName, pretty(o.Name ?? ''))}</span>
               <span className="custom-cost">{o.Cost > 0 ? `+${o.Cost}` : ''}</span>
             </button>

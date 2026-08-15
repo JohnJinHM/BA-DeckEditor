@@ -86,6 +86,11 @@ const STRINGS = {
   availability: { eng: 'Availability', chi: '可用数量' },
   categoryFull: { eng: 'All slots in this category are filled', chi: '该类别槽位已满' },
   availabilityHint: { eng: 'Click to add one; the count is capped by availability', chi: '点击添加一个；数量受可用上限限制' },
+  deselectCategory: {
+    eng: 'Click again for an overview of every category',
+    chi: '再次点击以查看所有类别总览',
+  },
+  openCategory: { eng: 'Open this category', chi: '打开该类别' },
 
   // Stacked (portrait) layout panes
   paneUnits: { eng: 'Units', chi: '单位' },

@@ -91,4 +91,7 @@
 .custom-choice:hover { border-color: rgba(231, 248, 229, 0.45); }
 .custom-choice.active { border-color: var(--c-yellow); }
 .custom-choice-art { width: 64px; height: 26px; object-fit: contain; }
+/* weapon silhouettes only — the game shows them mirrored (card.css does the
+   same for the card's own weapon list) */
+.custom-choice-art.mirror { transform: scaleX(-1); }
 .custom-choice-name { overflow: hidden; text-overflow: ellipsis; line-height: 1.25; }

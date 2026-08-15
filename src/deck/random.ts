@@ -28,7 +28,9 @@ export interface RandomDeckOptions {
   transportChance?: number
 }
 
-export const DEFAULT_TARGET = 9900
+/** Opening value of the dialog's point target: spend the whole budget. The
+ *  generator never exceeds it, and the dialog clamps it to the nation's cap. */
+export const DEFAULT_TARGET = 10000
 
 const pick = <T,>(xs: T[]): T => xs[Math.floor(Math.random() * xs.length)]
 

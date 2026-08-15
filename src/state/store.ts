@@ -48,6 +48,8 @@ interface AppState {
   randomizeDeck(options: RandomDeckOptions): void
 
   selectSlot(category: CategoryKey, index: number): void
+  /** drop back to the all-categories overview */
+  clearSelection(): void
   addUnit(unitId: number): void
   setSlotUnit(unitId: number | null): void
   setSlotCount(count: number): void
@@ -85,16 +87,6 @@ function renderCards(
     card: slot ? render(slot.unitId, slot.options) : null,
     transportCard: slot ? render(slot.transportId, slot.transportOptions) : null,
   }
-}
-
-/** First slot worth opening on: the first filled one, else the first slot of
- *  the first category the specs grant. */
-function firstSlotRef(deck: Deck): SlotRef | null {
-  const filled = CATEGORIES.find((c) => deck.slots[c.key].some((s) => s.unitId != null))
-  if (filled)
-    return { category: filled.key, index: deck.slots[filled.key].findIndex((s) => s.unitId != null) }
-  const any = CATEGORIES.find((c) => deck.slots[c.key].length > 0)
-  return any ? { category: any.key, index: 0 } : null
 }
 
 /** Apply `mutate` to a slot (the selected one by default) and re-render. */
@@ -165,7 +157,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       slots: Object.fromEntries(CATEGORIES.map((c) => [c.key, []])) as unknown as Deck['slots'],
     }
     const deck = { ...base, slots: slotsForSpecs(db, base) }
-    set({ deck, selected: firstSlotRef(deck), card: null, transportCard: null })
+    // No category open: a new deck lands on the all-categories overview.
+    set({ deck, selected: null, card: null, transportCard: null })
   },
 
   setDeckName(name) {
@@ -196,9 +189,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       })
     }
+    // Stay where the user was, unless the new pair took that slot away.
     const prev = get().selected
-    const selected =
-      prev && prev.index < next.slots[prev.category].length ? prev : firstSlotRef(next)
+    const selected = prev && prev.index < next.slots[prev.category].length ? prev : null
     set({ deck: next, selected, ...renderCards(db, next, selected) })
   },
 
@@ -206,14 +199,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { db, deck } = get()
     if (!db || !deck) return
     const next = generateRandomDeck(db, deck, options)
-    const selected = firstSlotRef(next)
-    set({ deck: next, selected, ...renderCards(db, next, selected) })
+    // The overview shows the whole roll at once, which is what you want to see.
+    set({ deck: next, selected: null, card: null, transportCard: null })
   },
 
   selectSlot(category, index) {
     const { db, deck } = get()
     const selected = { category, index }
     set({ selected, ...renderCards(db, deck, selected) })
+  },
+
+  clearSelection() {
+    set({ selected: null, card: null, transportCard: null })
   },
 
   /** One click on a unit in the pool = one more of that unit, the way the
@@ -369,8 +366,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const db = get().db
     if (!db) throw new Error('Database not loaded')
     const deck = await decodeDek(db, bytes)
-    const selected = firstSlotRef(deck)
-    set({ deck, selected, ...renderCards(db, deck, selected) })
+    set({ deck, selected: null, card: null, transportCard: null })
   },
 
   async exportDek() {

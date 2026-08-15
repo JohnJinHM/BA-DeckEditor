@@ -44,7 +44,8 @@ async function sampleDeck() {
   }
 }
 
-/** Get `page` from the create dialog to a filled deck. */
+/** Get `page` from the create dialog to a filled deck. A loaded deck lands on
+ *  the all-categories overview, with no slot strip until one is opened. */
 async function fillDeck(page) {
   if (dek) {
     await page.click('.setup-actions button:not(.primary)')
@@ -60,14 +61,25 @@ async function fillDeck(page) {
     await page.waitForSelector('.setup-dialog.narrow')
     await page.locator('.setup-actions button', { hasText: 'Generate' }).click()
   }
-  await page.waitForSelector('.slot-card:not(.empty)')
+  await page.waitForSelector('.overview-cell')
   await page.waitForTimeout(600)
+}
+
+/** Open the first category, which brings the slot strip and a card on screen. */
+async function openFirstCategory(page) {
+  await page.locator('.category-row').first().click()
+  await page.waitForSelector('.slot-strip')
+  await page.waitForTimeout(400)
 }
 
 await fillDeck(page)
 await page.screenshot({ path: join(OUT, '2-deck.png') })
 
-// 3. expanded card + an open customization row
+// 3. a category open: slot strip, unit pool and the selected slot's card
+await openFirstCategory(page)
+await page.screenshot({ path: join(OUT, '2b-category.png') })
+
+// 4. expanded card + an open customization row
 await page.click('.segmented button:nth-child(2)')
 await page.waitForTimeout(300)
 await page.screenshot({ path: join(OUT, '3-expanded.png') })
@@ -77,7 +89,8 @@ await page.screenshot({ path: join(OUT, '3-expanded.png') })
 async function openSlot(category) {
   const rail = page.locator('.category-row', { hasText: category })
   if ((await rail.count()) === 0) return false
-  await rail.click()
+  // clicking the open category closes it again, so only click a closed one
+  if (!((await rail.getAttribute('class')) ?? '').includes('active')) await rail.click()
   await page.waitForTimeout(300)
   const slot = page.locator('.slot-strip .slot-card:not(.empty)').first()
   if ((await slot.count()) === 0) return false
@@ -86,7 +99,7 @@ async function openSlot(category) {
   return true
 }
 
-// 4. an aircraft slot: several customization rows, one expanded
+// 5. an aircraft slot: several customization rows, one expanded
 if (await openSlot('Aircraft')) {
   const row = page.locator('.card-panel .custom-row:not([disabled])').first()
   if ((await row.count()) > 0) {
@@ -100,7 +113,7 @@ if (await openSlot('Aircraft')) {
   await page.screenshot({ path: join(OUT, '5-aircraft.png') })
 }
 
-// 5. an infantry squad with a transport — unit card + transport card stacked
+// 6. an infantry squad with a transport — unit card + transport card stacked
 await openSlot('Infantry')
 const withTransport = page.locator('.slot-strip .slot-card:has(.slot-transport)').first()
 if ((await withTransport.count()) > 0) {
@@ -114,7 +127,7 @@ if ((await withTransport.count()) > 0) {
   })
 }
 
-// 6. nation + spec chooser, showing what the change would cost the deck
+// 7. nation + spec chooser, showing what the change would cost the deck
 await page.click('.specs-chip')
 await page.waitForSelector('.setup-dialog')
 await page.locator('.setup-dialog .nation-btn', { hasText: 'USA' }).click()
@@ -123,7 +136,7 @@ await page.waitForTimeout(400)
 await page.screenshot({ path: join(OUT, '6-specs.png') })
 await page.locator('.setup-actions button', { hasText: 'Cancel' }).click()
 
-// 7. the discard guard and the random-battlegroup panel
+// 8. the discard guard and the random-battlegroup panel
 await page.getByRole('button', { name: 'New battlegroup' }).click()
 await page.waitForSelector('.confirm-dialog')
 await page.screenshot({ path: join(OUT, '8-discard-guard.png') })
@@ -164,6 +177,7 @@ for (const [label, viewport] of [
   )
   if (overflow > 0) problems.push(`${label}: page scrolls horizontally by ${overflow}px`)
 
+  await openFirstCategory(p)
   const tab = p.locator('.pane-tabs button', { hasText: 'Card' })
   if ((await tab.count()) > 0) await tab.click()
   await p.waitForTimeout(500)
