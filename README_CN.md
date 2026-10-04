@@ -1,5 +1,11 @@
 # [BA-DeckEditor](https://johnjinhm.github.io/BA-DeckEditor/)
 
+**数据库版本：1.2.0.3** — 540 个单位、24 张表、16,687 条记录，包含 DLC3 俄罗斯近卫军。
+
+`npm run verify` 检查全部单位与配装、30 个可用专精组合的规则和 `.dek` 编解码，
+并核对图片路径。生产预览启动后，运行
+`node scripts/e2e-refresh.mjs <预览地址>` 可验证新专精与 DLC3 卡片。
+
 在浏览器里编辑 **《Broken Arrow》战斗群（battlegroup）**：选择国家与两个专精，
 在游戏自身的点数与可用数量限制下填满各类别槽位，并**导入 / 导出真正的 `.dek` 文件**。
 

@@ -10,13 +10,14 @@
 
 import { mkdir, readdir, copyFile, readFile } from 'node:fs/promises'
 import { join, basename, dirname, relative } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 const EXPORT_ROOT =
   process.argv[2] ??
-  'C:/Users/jinha/Desktop/Temp/AssetRipper_export_20260813_021732/ExportedProject'
+  'C:/Users/jinha/Desktop/Temp/ba/ExportedProject'
 const SRC = join(EXPORT_ROOT, 'Assets')
-const ROOT = new URL('../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const OUT = join(ROOT, 'public/assets')
 
 const IMG = join(SRC, 'Prefabs/GUI/HUD/Images')
@@ -28,6 +29,7 @@ async function copyPngs(srcDir, outDir, { recurse = false, filter = () => true }
   let n = 0
   for (const e of entries) {
     if (!e.isFile() || !e.name.toLowerCase().endsWith('.png') || !filter(e.name)) continue
+    if (relative(srcDir, join(e.parentPath ?? e.path, e.name)).split(/[\\/]/).includes('outline')) continue
     await copyFile(join(e.parentPath ?? e.path, e.name), join(outDir, e.name))
     n++
   }
@@ -38,12 +40,15 @@ async function copyPngs(srcDir, outDir, { recurse = false, filter = () => true }
  *  have an `outline/` variant folder that Options.ThumbnailOverride refers to
  *  by relative path, and portraits are `<COUNTRY>/<UNIT>/`). `filter` receives
  *  the path relative to `srcDir`, with forward slashes. */
-async function webpTree(srcDir, outDir, { filter = () => true, quality = 85, recurse = false } = {}) {
+async function webpTree(srcDir, outDir, { filter = () => true, quality = 85, recurse = false, spriteLayout = false } = {}) {
   let n = 0
   for (const e of await readdir(srcDir, { withFileTypes: true, recursive: recurse })) {
     if (!e.isFile() || !e.name.endsWith('.png')) continue
     const dir = e.parentPath ?? e.path
-    const rel = relative(srcDir, join(dir, e.name)).replace(/\\/g, '/')
+    const sourceRel = relative(srcDir, join(dir, e.name)).replace(/\\/g, '/')
+    const rel = spriteLayout
+      ? `${sourceRel.split('/').includes('outline') ? 'outline/' : ''}${e.name}`
+      : sourceRel
     if (!filter(rel)) continue
     const dest = join(outDir, rel.replace(/\.png$/, '.webp'))
     await mkdir(dirname(dest), { recursive: true })
@@ -66,7 +71,7 @@ async function referencedNames() {
   const add = (n) => n && thumbs.add(n.replace(/\\/g, '/'))
   for (const u of units) add(u.ThumbnailFileName)
   for (const o of options) add(o.ThumbnailOverride)
-  const pictures = new Set(options.map((o) => o.OptionPicture).filter(Boolean))
+  const pictures = new Set(options.map((o) => o.OptionPicture?.toLowerCase()).filter(Boolean))
   return { thumbs, pictures }
 }
 
@@ -98,8 +103,8 @@ async function main() {
   )
 
   // 3. Weapon / ammo icons, flags — verbatim
-  console.log('weapons:', await copyPngs(join(MOVED, 'Weapons/Icons'), join(OUT, 'weapons')))
-  console.log('ammo:', await copyPngs(join(MOVED, 'Ammunition/Icons'), join(OUT, 'ammo')))
+  console.log('weapons:', await copyPngs(join(MOVED, 'Weapons'), join(OUT, 'weapons'), { recurse: true }))
+  console.log('ammo:', await copyPngs(join(MOVED, 'Ammunition'), join(OUT, 'ammo'), { recurse: true }))
   console.log('flags:', await copyPngs(join(MOVED, 'Nations & Specs/Flags'), join(OUT, 'flags')))
 
   // 4. Specialization icons (Specializations.Icon) + illustrations
@@ -118,10 +123,16 @@ async function main() {
   let mods = await copyPngs(join(MOVED, 'Modifications'), join(OUT, 'modifications'), {
     recurse: true,
   })
-  mods += await copyPngs(join(MOVED, 'Weapons/Icons'), join(OUT, 'modifications'), {
-    filter: (f) => pictures.has(f.replace(/\.png$/, '')),
+  mods += await copyPngs(join(MOVED, 'Weapons'), join(OUT, 'modifications'), {
+    recurse: true,
+    filter: (f) => pictures.has(f.replace(/\.png$/i, '').toLowerCase()),
   })
   console.log(`modifications: ${mods}`)
+  // Some options refer to unit labels instead of modification/weapon art.
+  console.log('option labels:', await copyPngs(join(MOVED, 'Labels'), join(OUT, 'modifications'), {
+    recurse: true,
+    filter: (f) => pictures.has(f.replace(/\.png$/i, '').toLowerCase()),
+  }))
 
   // 6. Fonts (Inter statics)
   await mkdir(join(OUT, 'fonts'), { recursive: true })
@@ -138,8 +149,9 @@ async function main() {
   //    Keeps the `outline/` subfolder, which Options.ThumbnailOverride uses.
   console.log(
     'thumbnails:',
-    await webpTree(join(MOVED, 'Labels/Icons'), join(OUT, 'thumbnails'), {
+    await webpTree(join(MOVED, 'Labels'), join(OUT, 'thumbnails'), {
       recurse: true,
+      spriteLayout: true,
       filter: (rel) => thumbs.has(rel.replace(/\.png$/, '')),
     }),
   )

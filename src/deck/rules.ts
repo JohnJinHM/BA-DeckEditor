@@ -51,12 +51,12 @@ export function totalBudget(db: GameDb, deck: Deck): number {
 
 /** A unit's modifications in display order. */
 export function modificationsOf(db: GameDb, unitId: number): ModificationRow[] {
-  return [...(db.unitModifications.get(unitId) ?? [])].sort((a, b) => a.Order - b.Order)
+  return [...(db.unitModifications.get(unitId) ?? [])].sort((a, b) => a.Order - b.Order || a.Id - b.Id)
 }
 
 /** A modification's options in display order. */
 export function optionsOf(db: GameDb, modId: number): OptionRow[] {
-  return [...(db.modificationOptions.get(modId) ?? [])].sort((a, b) => a.Order - b.Order)
+  return [...(db.modificationOptions.get(modId) ?? [])].sort((a, b) => a.Order - b.Order || a.Id - b.Id)
 }
 
 /** The option a modification starts on: the `IsDefault` row if it has one,

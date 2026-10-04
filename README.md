@@ -1,5 +1,7 @@
 # [BA-DeckEditor](https://johnjinhm.github.io/BA-DeckEditor/)
 
+**Data build: 1.2.0.3** — 540 units, 24 tables, 16,687 rows; includes DLC3 Russian Guard.
+
 Build **Broken Arrow battlegroups** in the browser — pick a nation and two
 specializations, fill the category slots under the game's own point and
 availability limits, and **import/export real `.dek` files**.
@@ -97,6 +99,11 @@ the viewport.
 
 `/samples` holds real battlegroups exported from the game; both scripts skip
 their sample phases when it is empty, so a clean checkout still runs.
+
+The verification also resolves all units/options and tests all 30 playable
+specialization pairs through the actual rules and `.dek` codec. With the built
+app served on a local preview, `node scripts/e2e-refresh.mjs <url>` checks the
+Russian Guard specialization and DLC3 card artwork in the browser.
 
 ## Refreshing after a game patch
 

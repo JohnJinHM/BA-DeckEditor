@@ -6,8 +6,10 @@
 
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 
-const ROOT = new URL('../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const DATA = join(ROOT, 'public/data/tables')
 const ASSETS = join(ROOT, 'public/assets')
 
@@ -25,15 +27,21 @@ async function names(dir, ext) {
   }
 }
 
-// Weapons.HUDIcon values with no exactly-matching file: three case mismatches
-// (the game resolves sprites case-insensitively, a static host does not) plus
-// VEH_MilanER, which ships no sprite at any casing. src/assets.ts remaps them.
-const KNOWN_FIXES = new Set(['Stinger_x4', 'INF_Mk46', 'Kh_101', 'VEH_MilanER'])
+// Resolve names through the application's actual URL helpers, including case
+// aliases and bare DLC portrait names. A remap must point to an existing file.
+const source = ts.transpileModule(await readFile(join(ROOT, 'src/assets.ts'), 'utf8'), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+}).outputText.replaceAll('import.meta.env.BASE_URL', "'/'")
+const assets = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+const resolvedName = (resolver, dir, ext) => (name) =>
+  decodeURIComponent(resolver(name)).replace(`/assets/${dir}/`, '').slice(0, -ext.length)
+let failures = 0
 
-function report(label, referenced, have) {
+function report(label, referenced, have, resolveName = (name) => name) {
   const refs = new Set([...referenced].filter(Boolean).map((n) => n.replace(/\\/g, '/')))
-  const missing = [...refs].filter((n) => !have.has(n) && !KNOWN_FIXES.has(n))
-  const known = [...refs].filter((n) => !have.has(n) && KNOWN_FIXES.has(n)).length
+  const missing = [...refs].filter((n) => !have.has(resolveName(n)))
+  failures += missing.length
+  const known = [...refs].filter((n) => n !== resolveName(n) && have.has(resolveName(n))).length
   const status = missing.length ? `MISSING ${missing.length}` : `ok${known ? ` (${known} remapped)` : ''}`
   console.log(`${label.padEnd(16)} ${String(refs.size).padStart(5)} referenced  ${status}`)
   if (missing.length) console.log('   ', missing.slice(0, 30).join(', '))
@@ -49,7 +57,7 @@ const collect = (rows, ...fields) => {
   return s
 }
 
-report('weapons', collect(weapons, 'HUDIcon'), await names('weapons', '.png'))
+report('weapons', collect(weapons, 'HUDIcon'), await names('weapons', '.png'), resolvedName(assets.weaponIconUrl, 'weapons', '.png'))
 report('ammo', collect(ammo, 'HUDIcon'), await names('ammo', '.png'))
 report('flags', collect(countries, 'FlagFileName'), await names('flags', '.png'))
 report('specs', collect(specs, 'Icon'), await names('specs', '.png'))
@@ -71,6 +79,7 @@ report(
     ),
   ),
   await names('portraits', '.webp'),
+  resolvedName(assets.portraitUrl, 'portraits', '.webp'),
 )
 // Options.OptionPicture art: partly Modifications sprites, partly weapon
 // silhouettes — extract-assets.mjs collects both into one folder.
@@ -78,4 +87,7 @@ report(
   'option art',
   collect(options, 'OptionPicture').union(collect(mods, 'ThumbnailFileName')),
   await names('modifications', '.png'),
+  resolvedName(assets.optionPictureUrl, 'modifications', '.png'),
 )
+
+process.exitCode = failures ? 1 : 0

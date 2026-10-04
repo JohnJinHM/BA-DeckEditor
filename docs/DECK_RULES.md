@@ -3,6 +3,12 @@
 Every constraint the editor enforces, where it comes from in the game data, and
 how it was verified. Implemented in [`src/deck/rules.ts`](../src/deck/rules.ts).
 
+The current database is **1.2.0.3** (24 tables, 16,687 rows). Russian Guard /
+Defense Forces is specialization 12. `npm run verify` now exercises the actual
+resolver, rules, generator and encrypted codec against all 30 playable
+specialization pairs, even when no game-exported sample decks are present.
+It also checks all 540 unit cards, 2,046 options and referenced asset paths.
+
 The two sample battlegroups in [`/samples`](../samples) are the calibration
 set: both are complete, in-game-legal decks, and both come to **exactly 10000
 points** under the model below. `npm run verify` re-checks that.
@@ -82,7 +88,7 @@ card. `MaxAvailabilityXp1..3` are veterancy tiers and are 0 throughout the
 shipped data.
 
 - A deck's pool is the **union** of its two specs' rows. No unit appears under
-  two specializations of the same country in build 1.1.1.2, so no merge rule is
+  two specializations of the same country in build 1.2.0.3, so no merge rule is
   exercised; the code takes the larger limit if that ever changes.
 - The category tab of a unit is `Units.CategoryType`.
 - `count ≤ MaxAvailabilityXp0`.
@@ -102,9 +108,11 @@ specs.
 ## Default option selection
 
 A unit opens on, per modification: its `IsDefault` option, else the option with
-the **lowest `Order`**.
+the **lowest `Order`**, with `Id` breaking ties. The card resolver uses the same
+ordering; an omitted selection and an explicit default selection now render
+the same loadout and cost.
 
-Two thirds of the 541 modifications flag no default, and for those the
+Many of the 615 modifications flag no default, and for those the
 `Order`-0 row is consistently the empty/none choice — Ka-52 "Custom_Option_
 Empty" pylons, LMTV "Custom_Option_None". Falling back to table order instead
 would open the Ka-52 on 12×Vikhr (+100). The deck itself always stores an
